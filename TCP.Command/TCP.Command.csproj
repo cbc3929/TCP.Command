@@ -8,12 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="NLog" Version="5.3.2" />
     <PackageReference Include="System.Configuration.ConfigurationManager" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Reference Include="dotNetQTDrvImport">
-      <HintPath>D:\work\PlayBack_v5.0\SignalPlayBack\DllFile\dotNetQTDrvImport.dll</HintPath>
+      <HintPath>..\..\FMC_416160B\bin\Release\x64\dotNetQTDrvImport.dll</HintPath>
     </Reference>
   </ItemGroup>
 

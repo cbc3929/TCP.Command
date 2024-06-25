@@ -1,234 +1,235 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using Lookdata;
+using System;
+using System.Collections.Concurrent;
+using System.Diagnostics.Metrics;
+using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 
-namespace TCP.Command
+public class BackgroundTaskManager
 {
-    using Lookdata;
-    using System;
-    using System.Collections.Generic;
-    using System.Threading;
-    using System.Threading.Tasks;
-    using TCP.Command.PCIE;
+    private ConcurrentDictionary<int, Task> backgroundTasks = new ConcurrentDictionary<int, Task>();
+    private CancellationTokenSource cts = new CancellationTokenSource();
 
-    public class TaskManager
+    public void StartAllTasks(int numberOfBoards)
     {
-        private CancellationTokenSource cts;
-        private List<Task> backgroundTasks;
-        private ManualResetEvent mre = new ManualResetEvent(false);
-
-        public void InitializeTasks()
+        for (int i = 0; i < numberOfBoards; i++)
         {
-            cts = new CancellationTokenSource();
-            backgroundTasks = new List<Task>();
-
-            backgroundTasks.Add(Task.Run(() => TaskCjWork(cts.Token)));
-
-            for (int i = 0; i < Dev_Config.NoDmaCh; i++)
-            {
-                int index = i; // To avoid closure issue in loop
-                backgroundTasks.Add(Task.Run(() => TaskWriteFileWork(index, cts.Token)));
-            }
-
-            backgroundTasks.Add(Task.Run(() => TaskSignalSimWork(cts.Token)));
-        }
-
-        public void StartTasks()
-        {
-            InitializeTasks();
-        }
-
-        public void CancelTasks()
-        {
-            cts.Cancel();
-            Task.WaitAll(backgroundTasks.ToArray());
-        }
-
-        private async Task TaskCjWork(CancellationToken token)
-        {
-            while (!mre.WaitOne(100) && (!token.IsCancellationRequested)) ;
-
-            if ((Dev_Config.WorkSate == 1) || (Dev_Config.WorkSate == 3))
-                ReportProgress(1, "正在采集...");
-            else
-                ReportProgress(1, "正在回放...");
-
-            int[] TotalMB = new int[Dev_Config.NoDmaCh];
-            float[] bps = new float[Dev_Config.NoDmaCh];
-            int[] len = new int[Dev_Config.NoDmaCh];
-
-            UInt32 BA = 0x80010000;
-            UInt32 OS = 0x7c;
-            UInt32 rdval = 0;
-            bool EnTrig = false;
-
-            await Task.Delay(2000);
-
-            while (!token.IsCancellationRequested)
-            {
-                if ((Dev_Config.WorkSate == 1) || (Dev_Config.WorkSate == 3))
-                {
-                    Dev_Config.ReadRegisterValue(Dev_Config.unBoardIndex, ref BA, ref OS, ref rdval);
-                    await Task.Delay(1000);
-                    for (int i = 0; i < Dev_Config.NoDmaCh; i++)
-                    {
-                        dotNetQTDrv.QTGetRegs_i32(Dev_Config.unBoardIndex, Regs.TotalMB, ref TotalMB[i], i);
-                    }
-                }
-                else
-                {
-                    await Task.Delay(1000);
-                    BA = 0x80030000;
-                    OS = 0x7c;
-                    rdval = 0;
-                    dotNetQTDrv.QTReadRegister(Dev_Config.unBoardIndex, ref BA, ref OS, ref rdval);
-
-                    if ((rdval & 0x2) == 0x2)
-                    {
-                        Dev_Config.errov = 1;
-                        ReportProgress(1, "板卡缓存读空！");
-                        cts.Cancel();
-                        break;
-                    }
-
-                    for (int i = 0; i < Dev_Config.NoDmaCh; i++)
-                    {
-                        dotNetQTDrv.QTGetRegs_i32(Dev_Config.unBoardIndex, Regs.RepTotalMB, ref TotalMB[i], i);
-                    }
-
-                    if ((TotalMB[0] > 256 || TotalMB[1] > 256) && !EnTrig)
-                    {
-                        uint slv_reg_r2_1 = Dev_Config.vald_out_1 << 3 | Dev_Config.vald_out_2 << 4 | Dev_Config.dout_ctrl;
-                        dotNetQTDrv.QTWriteRegister(Dev_Config.unBoardIndex, 0x800e0000, 1 * 4, slv_reg_r2_1);
-                        EnTrig = true;
-                    }
-                }
-
-                string volume = Dev_Config.FileCatalog.Substring(0, Dev_Config.FileCatalog.IndexOf(':'));
-                long freespace = Dev_Config.GetHardDiskSpace(volume);
-                long t2 = Dev_Config.sw.ElapsedMilliseconds;
-                for (int i = 0; i < Dev_Config.NoDmaCh; i++)
-                {
-                    len[i] = TotalMB[i] / 1024;
-                    bps[i] = t2 > 0 ? (float)TotalMB[i] * 1000 / t2 : 0;
-                }
-
-                ReportProgress(2, $"{len[0]}/{len[1]}");
-                ReportProgress(3, $"{(Int64)bps[0]}/{(Int64)bps[1]}");
-                ReportProgress(6, (freespace >> 10).ToString());
-                ReportProgress(7, "0x0");
-            }
-
-            // 退出前读取溢出状态
-            await HandleOverflowState(token);
-            Dev_Config.sw.Stop();
-        }
-
-        private async Task TaskWriteFileWork(int DmaChIndex, CancellationToken token)
-        {
-            mre.Set();
-            if (token.IsCancellationRequested) return;
-
-            if (!token.IsCancellationRequested)
-            {
-                if ((Dev_Config.WorkSate == 1) || (Dev_Config.WorkSate == 3))
-                {
-                    if (Dev_Config.dout_sel != 0)
-                    {
-                        dotNetQTDrv.QTStoreData(Dev_Config.unBoardIndex, ref Dev_Config.usrname[0], 0, DmaChIndex);
-                        UInt32 slv_reg_r2_1 = 0;
-                        Dev_Config.UPdataRegisterValue(Dev_Config.unBoardIndex, 0x800F0000, 1 * 4, slv_reg_r2_1 | 0x0C);
-                    }
-                    else
-                    {
-                        dotNetQTDrv.QTStoreData(Dev_Config.unBoardIndex, ref Dev_Config.usrname[0], 0);
-                    }
-                }
-                else
-                {
-                    if (!Dev_Config.SignalFileState)
-                        dotNetQTDrv.LDReplayData(Dev_Config.unBoardIndex, DmaChIndex);
-                    else
-                    {
-                        await Task.Run(() => TaskSignalSimWork(token));
-                        dotNetQTDrv.QTSetRegs_i32(Dev_Config.unBoardIndex, Regs.RepKeepRun, 1, DmaChIndex);
-                    }
-                }
-                if (!Dev_Config.sw.IsRunning)
-                    Dev_Config.sw.Start();
-            }
-
-            if (!token.IsCancellationRequested)
-            {
-                if ((Dev_Config.WorkSate == 1) || (Dev_Config.WorkSate == 3))
-                    dotNetQTDrv.QTWriteFileDone(Dev_Config.unBoardIndex, DmaChIndex);
-                else
-                    await HandleFileReplaying(DmaChIndex, token);
-            }
-        }
-
-        private async Task TaskSignalSimWork(CancellationToken token)
-        {
-            // Implementation of SignalSimWork
-            // Placeholder: Implement your logic here.
-            await Task.Delay(1000, token); // Simulate some work
-        }
-
-        private async Task HandleOverflowState(CancellationToken token)
-        {
-            UInt32 BA = 0x80010000;
-            UInt32 OS = 0x7c;
-            UInt32 rdval = 0;
-
-            if ((Dev_Config.WorkSate == 1) || (Dev_Config.WorkSate == 3))
-            {
-                Dev_Config.ReadRegisterValue(Dev_Config.unBoardIndex, ref BA, ref OS, ref rdval);
-                int PingPangBufIsOverFlow = 0;
-                dotNetQTDrv.QTGetRegs_i32(Dev_Config.unBoardIndex, Regs.PingPangBufIsOverFlow, ref PingPangBufIsOverFlow);
-                if ((rdval & 0x2) == 0x2)
-                {
-                    Dev_Config.errov = 1;
-                    ReportProgress(1, "板卡乒乓缓存数据溢出！");
-                    //ErrorProcess(Dev_Config.WorkSate);
-                    cts.Cancel();
-                }
-            }
-            else
-            {
-                BA = 0x80030000;
-                OS = 0x7c;
-                rdval = 0;
-                Dev_Config.ReadRegisterValue(Dev_Config.unBoardIndex, ref BA, ref OS, ref rdval);
-                if ((rdval & 0x2) == 0x2)
-                {
-                    Dev_Config.errov = 1;
-                    ReportProgress(1, "板卡缓存读空！");
-                    cts.Cancel();
-                }
-            }
-            await Task.Delay(0); // Ensure method is async
-        }
-
-        private async Task HandleFileReplaying(int DmaChIndex, CancellationToken token)
-        {
-            string RepFile = Dev_Config.FileCatalog + "\\" + "sin_data.bin";
-            byte[] byte_RepFile = System.Text.Encoding.Default.GetBytes(RepFile);
-
-            while (!token.IsCancellationRequested)
-            {
-                await Task.Delay(100);
-                dotNetQTDrv.QTGetRegs_i32(Dev_Config.unBoardIndex, Regs.RepKeepRun, ref Dev_Config.RepKeepRun[DmaChIndex], DmaChIndex);
-            }
-        }
-
-        private void ReportProgress(int progressType, string message)
-        {
-            // Implement the logic to handle progress reporting here
-            // For example, logging the message or sending it to a monitoring service
-            Console.WriteLine($"Progress {progressType}: {message}");
+            int boardIndex = i;
+            backgroundTasks[boardIndex] = Task.Run(() => DoWork_cj(boardIndex, cts.Token));
         }
     }
 
+    public void StopAllTasks()
+    {
+        cts.Cancel();
+    }
+
+    public async Task WaitAllTasksAsync()
+    {
+        await Task.WhenAll(backgroundTasks.Values);
+    }
+
+    private async Task DoWork_cj(int boardIndex, CancellationToken token)
+    {
+        //uint CurCardIndex = (uint)boardIndex;
+        //float[] bps = new float[NoDmaCh];
+        //long t2;
+
+        //if (EnADCWork > 0)
+        //    Console.WriteLine("正在采集...");
+        //if (EnDACWork > 0)
+        //    Console.WriteLine("正在回放...");
+        //if ((EnADCWork > 0) && (EnDACWork > 0))
+        //    Console.WriteLine("同时收发...");
+
+        //int PingPangBufIsOverFlow = 0, RepPingPangBufIsOverFlow = 0;
+        //int[] TotalMB = new int[NoDmaCh];
+        //UInt32 BA = 0x80010000;
+        //UInt32 OS = 0x7c;
+        //UInt32 rdval = 0;
+        //bool EnTrig = false;
+        //await Task.Delay(2000);
+
+        //while (!token.IsCancellationRequested)
+        //{
+        //    if (EnADCWork > 0)
+        //    {
+        //        await Task.Delay(1000, token);
+        //        for (int i = 0; i < NoDmaCh; i++)
+        //            dotNetQTDrv.QTGetRegs_i32(CurCardIndex, Regs.TotalMB, ref TotalMB[i], i);
+        //        // 采集模式下，在此添加读写寄存器的操作
+        //    }
+
+        //    if (EnDACWork > 0)
+        //    {
+        //        await Task.Delay(1000, token);
+        //        for (int i = 0; i < NoDmaCh; i++)
+        //            dotNetQTDrv.QTGetRegs_i32(CurCardIndex, Regs.RepTotalMB, ref TotalMB[i], i);
+
+        //        // 采集模式下，在此添加读写寄存器的操作
+        //        if ((TotalMB[0] >= 256 /*|| TotalMB[1] >= 256*/) && (EnTrig == false))
+        //        {
+        //            if (EnALG && (EnSim == false))
+        //                dotNetQTDrv.QTWriteRegister(CurCardIndex, 0x800e0000, (uint)1 * 4, 0x9);
+        //            EnTrig = true;
+        //        }
+        //    }
+
+        //    // 获得磁盘剩余容量等操作
+        //}
+
+        //// 停止工作时，等待所有写文件任务完成
+        //for (int i = 0; i < NoDmaCh; i++)
+        //{
+        //    while (!token.IsCancellationRequested)
+        //        await Task.Delay(100, token);
+        //}
+    }
+
+    private async Task DoWork_writefile(FormalParams mywork_params, CancellationToken token)
+    {
+        //int CurWorkMode = 0;//0:当前后台负责采集；1：当前后台负责回放
+        //uint CurCardIndex = (uint)mywork_params.CardIndex;
+        //int DmaChIndex = mywork_params.DmaChIndex;
+        //if (DmaChIndex == 0)
+        //    CurWorkMode = 0;
+        //else
+        //    CurWorkMode = 1;
+        //#region 时长问题
+        ////    if (CurWorkMode == 0 && radioButton3.Checked)//设定时长
+        ////    {
+        ////        if (checkBox1.Checked)//预约开始
+        ////        {
+        ////            int CountDownTime = Convert.ToInt32(this.numericUpDown6.Value * 3600 + this.numericUpDown7.Value * 60 + this.numericUpDown8.Value);
+        ////            var sw2 = Stopwatch.StartNew();
+        ////            do
+        ////            {
+        ////                if (sw2.Elapsed.Seconds >= CountDownTime)
+        ////                {
+        ////                    isTimeSchStart = true;
+        ////                    Console.WriteLine("开始采集");
+        ////                    break;
+        ////                }
+        ////                else
+        ////                {
+        ////                    await Task.Delay(100, token);
+        ////                    Console.WriteLine("(" + Convert.ToString(CountDownTime - sw2.Elapsed.Seconds) + ")");
+        ////                }
+        ////            } while (!token.IsCancellationRequested);
+        ////            sw2.Stop();
+        ////        }
+        ////        else
+        ////        {
+        ////            isTimeSchStart = true;
+        ////        }
+        ////        if (!isTimeSchStart)
+        ////            return;
+        ////    //}
+        //#endregion
+        //mre.Set();
+
+        //if (token.IsCancellationRequested)
+        //    return;
+
+        //if (!token.IsCancellationRequested)
+        //{
+            
+        //    if (EnDACWork > 0)
+        //    {
+        //        if (!EnSim)
+        //        {
+        //            mutex.WaitOne();
+        //            dotNetQTDrv.LDSetParam(CurCardIndex, Comm.CMD_MB_ENABLE_REPLAY_MODE, 1, 0, 0, 0xFFFFFFFF);
+        //            dotNetQTDrv.LDReplayData(CurCardIndex, DmaChIndex);
+        //            mutex.ReleaseMutex();
+        //        }
+        //        else
+        //        {
+        //            while (task_SignalSim[CurCardIndex, DmaChIndex].Status == TaskStatus.Running) ;
+        //            dotNetQTDrv.QTSetRegs_i32(unBoardIndex, Regs.RepKeepRun, 1, DmaChIndex);
+        //            await DoWork_SignalSim(mywork_params, token);
+        //        }
+        //    }
+        //    dotNetQTDrv.RegisterCallBackPCIeUserEvent(unBoardIndex, CallBackUserEvent[CurCardIndex], 1);
+        //    dotNetQTDrv.RegisterCallBackPCIeUserEvent(unBoardIndex, CallBackUserEvent[CurCardIndex], 2);
+        //    if (!sw.IsRunning)
+        //    {
+        //        sw.Start();
+        //    }
+        //}
+
+        //if (!token.IsCancellationRequested)
+        //{
+        //    if (EnADCWork > 0)
+        //    {
+        //        dotNetQTDrv.QTWriteFileDone(CurCardIndex, DmaChIndex);
+        //    }
+        //    if (EnDACWork > 0)
+        //    {
+        //        string RepFile = FileLocation + "\\" + "sin_data.bin";
+        //        byte[] byte_RepFile = new byte[(int)255];
+        //        byte_RepFile = System.Text.Encoding.Default.GetBytes(RepFile);
+
+        //        while (!token.IsCancellationRequested)
+        //        {
+        //            await Task.Delay(100, token);
+        //            dotNetQTDrv.QTGetRegs_i32(CurCardIndex, Regs.RepKeepRun, ref RepKeepRun[DmaChIndex], DmaChIndex);
+        //            if (RepKeepRun[DmaChIndex] == 0)
+        //            {
+        //                break;
+        //            }
+        //        }
+        //    }
+        //}
+    }
+
+    private async Task DoWork_SignalSim(FormalParams mywork_params, CancellationToken token)
+    {
+        //    uint CurCardIndex = (uint)mywork_params.CardIndex;
+        //    int DmaChIndex = mywork_params.DmaChIndex;
+        //    Int64 TotalSent = 0;
+        //    bool EnTrig = false;
+
+        //    long FileSizeB = 0;
+        //    uint SentByte = 0;
+
+        //    try
+        //    {
+        //        var fileInfo = new System.IO.FileInfo(OfflineFileName);
+        //        if (fileInfo.Exists)
+        //        {
+        //            FileSizeB = fileInfo.Length;
+        //            byte[] buffer = ReadBigFile(OfflineFileName, (int)FileSizeB);
+        //            while (!token.IsCancellationRequested)
+        //            {
+        //                SinglePlay(unBoardIndex, buffer, (uint)FileSizeB, ref SentByte, 1000, DmaChIndex);
+        //                if (!EnTrig)
+        //                {
+        //                    UInt32 val = 1 + (UInt32)(1 << (DmaChIndex + 3));
+        //                    dotNetQTDrv.QTWriteRegister(CurCardIndex, 0x800e0000, (uint)1 * 4, val);
+        //                    EnTrig = true;
+        //                }
+        //                TotalSent += SentByte;
+        //                dotNetQTDrv.QTSetRegs_i64(unBoardIndex, Regs.RepTotalMB, TotalSent, DmaChIndex);
+        //            }
+        //        }
+        //    }
+        //    catch (Exception err)
+        //    {
+        //        Console.WriteLine("读取仿真文件遇到异常：" + err.Message);
+        //        return;
+        //    }
+
+        //    dotNetQTDrv.QTWriteRegister(unBoardIndex, 0x800e0000, 4 * 4, 0);
+
+        //    dotNetQTDrv.QTSetRegs_i32(unBoardIndex, Regs.RepKeepRun, 0);
+        //    while (!token.IsCancellationRequested)
+        //        await Task.Delay(100, token);
+    }
+    public class FormalParams
+    {
+        public int CardIndex;//板卡编号，从0开始
+        public int DmaChIndex;//DMA通道编号，从0开始
+    }
 }

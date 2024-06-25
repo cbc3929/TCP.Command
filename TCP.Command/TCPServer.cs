@@ -10,38 +10,42 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using TCP.Command.Interface;
 using TCP.Command.PCIE;
+using NLog;
 
 namespace TCP.Command
 {
     public class TCPServer
     {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private TcpListener tcpListener;
         private bool isRunning;
         private TcpClient currentClient;
         private readonly object lockObject = new object();
         private CommandManager commandQueueManager = new CommandManager();
         private PBConfig pBConfig;
+        private Task[] backgroundTasks;
+        private CancellationTokenSource cts = new CancellationTokenSource();
 
+        private void Log(string message)
+        {
+            Logger.Info(message);
+        }
+
+        private void LogError(string message)
+        {
+            Logger.Error(message);
+        }
 
         public TCPServer(int port) {
             tcpListener = new TcpListener(IPAddress.Any,port);
             isRunning = true;
             tcpListener.Start();
             Log(DateTime.Now.ToString("g")+ " Server started");
-            AcceptClientAsync(tcpListener);
+            _ = AcceptClientAsync(tcpListener);
 
         }
 
-        /// <summary>
-        /// 打印日志
-        /// </summary>
-        /// <param name="message"></param>
-
-        private void Log(string message) 
-        {
-            //在本地打印日志
-            Console.WriteLine(message);
-        }
+   
         /// <summary>
         /// 发送命令给当前连接的客户端
         /// </summary>
@@ -76,8 +80,9 @@ namespace TCP.Command
 
                         currentClient = client;
                         Log(DateTime.Now.ToString("g") + " Client accepted");
-                        Task.Run(() => HandleClient(client));
+                        
                     }
+                    _ = HandleClient(client);
                 }
                 catch(Exception ex) 
                 {
