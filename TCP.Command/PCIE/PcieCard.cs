@@ -33,6 +33,8 @@ namespace TCP.Command.PCIE
 
         private Mutex mutex_cb;
 
+
+
         public int NumberOfCards { get; private set; }
         public  UInt32 AdcBaseAddr { get; private set; }
 
@@ -88,46 +90,22 @@ namespace TCP.Command.PCIE
                   get; set;
         }
 
-
-        public int OpenDevice()
-        {
-            uint nRet = (uint)dotNetQTDrv.QTOpenBoard(this.unBoardIndex);
-            if (nRet == Error.RES_SUCCESS)
-            {
-                return 0;  // 设备成功打开
-            }
-            else
-            {
-                HandleInitializationError(nRet);
-                return -1;  // 设备打开失败
-            }
-        }
-
         public abstract int Initialize(uint unCardIdx);
-        private void HandleInitializationError(uint ret)
-        {
-            switch (ret)
-            {
-                case 2:
-                    Logger.Info("时钟频率错误！");
-                    break;
-                case Error.RES_OPEN_FAILURE:
-                    Logger.Info("打开板卡失败！");
-                    break;
-                case Error.RES_ERROR_ALLOC_BUF:
-                    Logger.Info("内存不足！");
-                    break;
-                case Error.RES_ERROR_DDR_INIT_FAILED:
-                    Logger.Info("板载内存初始化失败！");
-                    break;
-                case Error.RES_ERROR_PRODUCT_INFO_UNDEF:
-                    Logger.Info("读取板卡信息失败！");
-                    break;
-                default:
-                    Logger.Info($"初始化失败！0x{ret:x}");
-                    break;
-            }
-        }
+
+        public virtual async Task ExecuteSingleRunAsync(int channelNo) { }
+
+        public virtual async Task ExecuteLoopRunAsync(int channelNo) { }
+
+        public virtual async Task MonitorHardwareAsync(Func<bool> cancelCondition, int channelNo) { }
+
+
+        public abstract void OnOperationCompleted(int channelNo);
+
+        public abstract void CancelOperations(int channelNo);
+    
+
+
+    
         public PcieCard(uint cardIndex,int channelNumber,int numberofcards)
         {
             EnALG = true;
@@ -265,7 +243,7 @@ namespace TCP.Command.PCIE
         }
 
         public void DataPackProcess(int unitId,//接收机编号
-        int channelID,//DDC通道号，调用方法设置的。
+        int channelNo,//DDC通道号，调用方法设置的。
         IntPtr Buffer,//数据
         int len//数据长度，单位字节
         )
@@ -313,7 +291,7 @@ namespace TCP.Command.PCIE
             if (nRet != 0)
             {
                 StackTrace st = new StackTrace(new StackFrame(true));
-                //Console.WriteLine(" Stack trace for current level: {0}", st.ToString());
+                //Logger.Info(" Stack trace for current level: {0}", st.ToString());
                 StackFrame sf = st.GetFrame(0);
                 //MessageBox.Show(string.Format("Caller:{0}, @Line:{1}, with error Code:{2:x}", sf.GetMethod().Name, sf.GetFileLineNumber(), nRet));
                 logstr = string.Format("ERROR: {0:D} ", nRet) + log + "失败";
@@ -417,5 +395,7 @@ namespace TCP.Command.PCIE
                 }
             }
         }
+
+        public abstract void StopOperation();
     }
 }

@@ -10,7 +10,8 @@ namespace TCP.Command.Interface
 {
     public interface ICommand
     {
-        Task ExecuteAsync(TcpClient client);
-        Task UndoAsync();
+        Task ExecuteAsync();
+        //Task UndoAsync();
+        void Cancel();
     }
 }

@@ -12,7 +12,22 @@ namespace TCP.Command.PCIE
         {
         }
 
+        public override void CancelOperations(int channelNo)
+        {
+            throw new NotImplementedException();
+        }
+
         public override int Initialize(uint uncardIndex)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void OnOperationCompleted(int channelNo)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void StopOperation()
         {
             throw new NotImplementedException();
         }

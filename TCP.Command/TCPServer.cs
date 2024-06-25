@@ -141,7 +141,7 @@ namespace TCP.Command
 
                         //TODO: handle command here
                         ProcessCommand(command);
-                        commandQueueManager.ProcessCommandsAsync(tcpclient);
+                        commandQueueManager.ProcessCommandsAsync();
 
                     }
                 }
@@ -177,7 +177,7 @@ namespace TCP.Command
                     if (!string.IsNullOrEmpty(command))
                     {
                         int channelNumber = ExtractChannelNumber(command);
-                        ICommand commandobj = CommandFactory.ParseCommand(command, channelNumber, this);
+                        ICommand commandobj = CommandFactory.ParseCommand(command, channelNumber);
                         commandQueueManager.EnquueCommand(commandobj);
                     }
                 }
@@ -191,8 +191,15 @@ namespace TCP.Command
                 if (!string.IsNullOrEmpty(lastCommand))
                 {
                     int channelNumber = ExtractChannelNumber(lastCommand);
-                    ICommand commandobj = CommandFactory.ParseCommand(lastCommand, channelNumber, this);
-                    commandQueueManager.EnquueCommand(commandobj);
+                    try
+                    {
+                        ICommand commandobj = CommandFactory.ParseCommand(lastCommand, channelNumber);
+                        commandQueueManager.EnquueCommand(commandobj);
+                    }
+                    catch (Exception ex) {
+                        Logger.Error(ex);
+                    }
+
                 }
             }
         }

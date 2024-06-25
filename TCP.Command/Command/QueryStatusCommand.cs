@@ -13,20 +13,18 @@ namespace TCP.Command
     {
         private readonly string _commandText;
         private readonly int _channelNumber;
-        private readonly TCPServer _server;
         private PcieCard _card;
 
 
-        public QueryStatusCommand(string commandText, int channelNumber, TCPServer server,PcieCard card
+        public QueryStatusCommand(string commandText, int channelNumber,PcieCard card
             )
         {
             _commandText = commandText;
             _channelNumber = channelNumber;
-            _server = server;
             _card = card;
         }
 
-        public async Task ExecuteAsync(TcpClient client)
+        public async Task ExecuteAsync()
         {
             ChannelState state = _card.GetChannelState(_channelNumber);
             string response = "";
@@ -68,12 +66,10 @@ namespace TCP.Command
             {
                 response = "Unknown command";
             }
-
-            await _server.SendMsgAsync(client, response);
         }
 
 
-        public async Task UndoAsync()
+        public void Cancel()
         {
             // 查询命令通常不需要撤销逻辑
         }

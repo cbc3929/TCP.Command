@@ -8,6 +8,9 @@ namespace TCP.Command.PCIE
 {
     public class ChannelState
     {
+        public CancellationTokenSource singleRunCts;
+        public CancellationTokenSource loopRunCts;
+        public CancellationTokenSource monitorCts;
         public double Srate { get; set; }
 
         public bool ARBSwitch { get; set; }

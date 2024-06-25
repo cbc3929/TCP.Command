@@ -28,6 +28,7 @@ namespace TCP.Command.PCIE
             var temp_number = this.ProductNumber;
             ld_ChkRT(dotNetQTDrv.QTGetRegs_i32(unCardIdx, Regs.product_number, ref temp_number), "读取产品编码");
             ProductNumber = temp_number;
+            
             SampleRate = 512000000;
             uint refdiv = 10;
             RefClkMode = Comm.QTFM_COMMON_CLOCK_REF_MODE_1;
@@ -77,6 +78,99 @@ namespace TCP.Command.PCIE
                 ld_ChkRT(dotNetQTDrv.QTChannelOffsetSet(unCardIdx, -1, OffsetVolt), "设置偏置");
             }
             return 0;
+        }
+
+        public override async Task ExecuteSingleRunAsync(int channelNo)
+        {
+            ChannelStates[channelNo].singleRunCts = new CancellationTokenSource();
+            Logger.Info($"Channel {channelNo} ({DeviceName}): Starting single run operation.");
+            try
+            {
+                await Task.Delay(10000, ChannelStates[channelNo].singleRunCts.Token); // Simulate 10 seconds operation
+            }
+            catch (TaskCanceledException)
+            {
+                Logger.Info($"Channel {channelNo} ({DeviceName}): Single run operation cancelled.");
+            }
+            finally
+            {
+                OnOperationCompleted(channelNo);
+            }
+            Logger.Info($"Channel {channelNo} ({DeviceName}): Single run operation completed.");
+        }
+
+        public async Task ExecuteLoopRunAsync(int channelNo)
+        {
+            if (ChannelStates[channelNo].singleRunCts != null && !ChannelStates[channelNo].singleRunCts.IsCancellationRequested)
+            {
+                Logger.Info($"Channel {channelNo} ({DeviceName}): Waiting for single run to complete.");
+                await Task.Delay(1000); // Wait for single run to complete
+            }
+
+            ChannelStates[channelNo].loopRunCts = new CancellationTokenSource();
+            try
+            {
+                while (!ChannelStates[channelNo].loopRunCts.Token.IsCancellationRequested)
+                {
+                    Logger.Info($"Channel {channelNo} ({DeviceName}): Starting loop run operation.");
+                    await Task.Delay(10000, ChannelStates[channelNo].loopRunCts.Token); // Simulate 10 seconds operation
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                Logger.Info($"Channel {channelNo} ({DeviceName}): Loop run operation cancelled.");
+            }
+            finally
+            {
+                OnOperationCompleted(channelNo);
+            }
+        }
+
+        public async Task MonitorHardwareAsync(Func<bool> cancelCondition, int channelNo)
+        {
+            
+            Logger.Info($"Channel {channelNo} ({DeviceName}): Starting hardware monitoring.");
+            try
+            {
+                while (!ChannelStates[channelNo].monitorCts.Token.IsCancellationRequested)
+                {
+                    await Task.Delay(1000); // Check hardware state every second
+                    if (cancelCondition())
+                    {
+                        Logger.Info($"Channel {channelNo} ({DeviceName}): Cancel condition met. Cancelling operations.");
+                        ChannelStates[channelNo].singleRunCts?.Cancel();
+                        ChannelStates[channelNo].loopRunCts?.Cancel();
+                        break;
+                    }
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                Logger.Info($"Channel {channelNo} ({DeviceName}): Hardware monitoring cancelled.");
+            }
+            finally
+            {
+                OnOperationCompleted(channelNo);
+            }
+            Logger.Info($"Channel {channelNo} ({DeviceName}): Hardware monitoring stopped.");
+        }
+
+        public override void OnOperationCompleted(int channelNo)
+        {
+            // Place code here to restore hardware state or perform other cleanup operations
+            Logger.Info($"Channel {channelNo} ({DeviceName}): Performing cleanup operations.");
+        }
+
+        public override void CancelOperations(int channelNo)
+        {
+            ChannelStates[channelNo].singleRunCts?.Cancel();
+            ChannelStates[channelNo].loopRunCts?.Cancel();
+            ChannelStates[channelNo].monitorCts?.Cancel();
+        }
+
+        public override void StopOperation()
+        {
+            throw new NotImplementedException();
         }
     }
 }

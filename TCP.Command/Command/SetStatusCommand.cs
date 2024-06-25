@@ -19,11 +19,10 @@ namespace TCP.Command
         private PcieCard _card;
         //setting command
 
-        public SetStatusCommand(string commandText, int channelNumber, TCPServer server,PcieCard card)
+        public SetStatusCommand(string commandText, int channelNumber, PcieCard card)
         {
             _commandText = commandText;
             _channelNumber = channelNumber;
-            _server = server;
             _card = card;
         }
 
@@ -42,7 +41,7 @@ namespace TCP.Command
             }
         }
 
-        public async Task ExecuteAsync(TcpClient client)
+        public async Task ExecuteAsync()
         {
             var _pBconfig = PBConfig.Instance;
             string valueUnitPart = ParseCommandForValue(_commandText);
@@ -54,7 +53,7 @@ namespace TCP.Command
                 bool isOn = valueUnitPart.Contains("On") || valueUnitPart.Contains("1") || valueUnitPart.Contains("true");
                 _card.GetChannelState(_channelNumber).BBSwitch = isOn;
                 // 发送响应给客户端
-                await _server.SendMsgAsync(client, "BB MODE set to " + (isOn ? "On" : "Off"));
+                //await _server.SendMsgAsync(client, "BB MODE set to " + (isOn ? "On" : "Off"));
 
             }
             else if (_commandText.Contains("RF:SWITCH"))
@@ -65,7 +64,7 @@ namespace TCP.Command
                     //TODO 打开射频开关逻辑
                 }
                 _card.GetChannelState(_channelNumber).RFSwitch = isOn;
-                await _server.SendMsgAsync(client, "RF SWITCH set to " + (isOn ? "On" : "Off"));
+                //await _server.SendMsgAsync(client, "RF SWITCH set to " + (isOn ? "On" : "Off"));
             }
             else if (_commandText.Contains("ARB:SWITCH"))
             {
@@ -74,7 +73,7 @@ namespace TCP.Command
                 _pBconfig.SetARBSwitch((uint)_channelNumber, isOn);
 
                 _card.GetChannelState(_channelNumber).ARBSwitch = isOn;
-                await _server.SendMsgAsync(client, "ARB SWITCH set to " + (isOn ? "On" : "Off"));
+                //await _server.SendMsgAsync(client, "ARB SWITCH set to " + (isOn ? "On" : "Off"));
             }
             //下发文件
             else if (_commandText.Contains("ARB:SETTing:LOAD"))
@@ -107,12 +106,12 @@ namespace TCP.Command
                 {
                     _card.GetChannelState(_channelNumber).FreqValue = value * subUnitValue;
                     _card.GetChannelState(_channelNumber).FreqSubUnit = subUnit;
-                    await _server.SendMsgAsync(client, "Frequency set to " + value + subUnit + "Hz");
+                    //await _server.SendMsgAsync(client, "Frequency set to " + value + subUnit + "Hz");
                     _pBconfig.SetFreqValue((uint)_channelNumber, value * subUnitValue);
                 }
                 else
                 {
-                    await _server.SendMsgAsync(client, "Invalid frequency value");
+                    //await _server.SendMsgAsync(client, "Invalid frequency value");
                 }
             }
             else if (_commandText.Contains(":POWer"))
@@ -138,7 +137,7 @@ namespace TCP.Command
                     if (state != null)
                     {
                         state.PlaybackMethod = "SIN";
-                        await _server.SendMsgAsync(client, "Playback method set to SIN");
+                        //await _server.SendMsgAsync(client, "Playback method set to SIN");
                     }
                     _pBconfig.SetSingleReplay((uint)_channelNumber);
                 }
@@ -148,7 +147,7 @@ namespace TCP.Command
                     if (state != null)
                     {
                         state.PlaybackMethod = "TIC";
-                        await _server.SendMsgAsync(client, "Playback method set to TIC");
+                        //await _server.SendMsgAsync(client, "Playback method set to TIC");
                     }
                     _pBconfig.SetTickClockReplay((uint)_channelNumber, valueUnitPart);
                 }
@@ -158,7 +157,7 @@ namespace TCP.Command
                     if (state != null)
                     {
                         state.PlaybackMethod = "REP";
-                        await _server.SendMsgAsync(client, "Playback method set to REP");
+                        //await _server.SendMsgAsync(client, "Playback method set to REP");
                     }
                     _pBconfig.SetRepeatReplay((uint)_channelNumber,0);
                 }
@@ -189,21 +188,21 @@ namespace TCP.Command
                 {
                     _card.GetChannelState(_channelNumber).Srate = value * subUnitValue;
                     _card.GetChannelState(_channelNumber).SampSubUnit = subUnit;
-                    await _server.SendMsgAsync(client, "Sample rate set to " + value + subUnit + "Hz");
+                    //await _server.SendMsgAsync(client, "Sample rate set to " + value + subUnit + "Hz");
                     _pBconfig.SetSRateValue((uint)_channelNumber, value * subUnitValue);
                 }
                 else
                 {
-                    await _server.SendMsgAsync(client, "Invalid sample rate value");
+                    //await _server.SendMsgAsync(client, "Invalid sample rate value");
                 }
             }
             else if (_commandText.Contains(":PLAYBACKSING")) 
             {
                 Console.WriteLine("该指令无法解析" + _commandText);
-                await _server.SendMsgAsync(client, "该指令无法解析"+_commandText);
+                //await _server.SendMsgAsync(client, "该指令无法解析"+_commandText);
             }else
             {
-                await _server.SendMsgAsync(client, "Unknown command" + _commandText);
+                //await _server.SendMsgAsync(client, "Unknown command" + _commandText);
             }
 
         }
@@ -212,6 +211,8 @@ namespace TCP.Command
         {
             throw new NotImplementedException();
         }
+        public void Cancel() 
+        { }
 
     }
 }

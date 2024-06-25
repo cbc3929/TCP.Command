@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NLog;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,6 +12,9 @@ namespace TCP.Command.Command
 {
     public class CommandManager
     {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+
+
         private ConcurrentQueue<ICommand> commandQueue = new ConcurrentQueue<ICommand>();
 
         private ConcurrentStack<ICommand> commandHistory = new ConcurrentStack<ICommand>();
@@ -20,7 +24,7 @@ namespace TCP.Command.Command
             commandQueue.Enqueue(command);
         }
 
-        public async void ProcessCommandsAsync(TcpClient client)
+        public async void ProcessCommandsAsync()
         {
             while (!commandQueue.IsEmpty)
             {
@@ -28,19 +32,15 @@ namespace TCP.Command.Command
                 {
                     try
                     {
-                        await command.ExecuteAsync(client);
+                        await command.ExecuteAsync();
                         commandHistory.Push(command);
                     }
                     catch (Exception ex)
                     {
                         while (!commandHistory.IsEmpty)
                         {
-                            Console.WriteLine("Error executing command: " + ex.Message);
-                            Console.WriteLine("Undo commands ...");
-                            if (commandHistory.TryPop(out ICommand undoCommand))
-                            {
-                                await undoCommand.UndoAsync();
-                            }
+                           commandHistory.TryPop(out ICommand cmd);
+                           cmd.Cancel();
                         }
                         throw;
 

@@ -51,6 +51,13 @@ namespace TCP.Command.PCIE
                     var temp_number = 0;
                     dotNetQTDrv.QTGetRegs_i32(i, Regs.product_number, ref temp_number);
                     PcieCard card = PCIeCardFactory.CreatePcieCard(i, temp_number);
+                    if (temp_number != 0x416160B)
+                    {
+                        card.DeviceName = "宽带";
+                    }
+                    else {
+                        card.DeviceName = "窄带";
+                    }
                     uint result = (uint)card.Initialize(i);
                     if (Error.RES_SUCCESS != result)
                     {
