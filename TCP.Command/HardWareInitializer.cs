@@ -2,24 +2,39 @@
 using NLog;
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using static BackgroundTaskManager;
 
 namespace TCP.Command
 {
     public static class HardWareInitializer
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
-        public static int GetDeviceList()
+
+        public static nint[] CallBackBuffer { get; private set; }
+        public static nint[] CallBackFFTBuffer { get; private set; }
+        public static string AdcBaseAddr { get; private set; }
+
+        const int PackLenB = 128 * 1000;
+        const int PackNum = 50;
+        private static byte[] DDCCBBuf;// = new byte[PackLenB * PackNum];
+        private static byte[] FFTCBBuf;// = new byte[PackLenB * PackNum];
+        private static uint[] FFTPackCnt;//单位时间内包个数计数值
+        private static uint[] DDCPackCnt;//单位时间内包个数计数值
+
+        public static List<string> GetDeviceList()
         {
 
             var deviceStatusManger = DeviceStatsManager.Instance;
-#if DEBUG
-            return 0;
-        #else
+
+
+
             //dBm_offset[1, 0] = 0;
 
             for (uint i = 0; i < 2; i++)
@@ -98,15 +113,14 @@ namespace TCP.Command
                             else
                             {
                                 Logger.Info("初始化成功！");
-                                //count_f++;
                             }
-
                             break;
                         default:
                             device = "Not Defined";
                             Logger.Error("尚未适配该型号:0x" + Convert.ToString(deviceStatusManger.product_number, 16) + "错误");
-                            return -1;
                             //break;
+                            return DeviceStatsManager.Instance.deviceList;
+
                     }
                     Logger.Info(String.Concat("发现设备:" + device));
                     deviceStatusManger.deviceList.Add(device);
@@ -128,10 +142,9 @@ namespace TCP.Command
             {
                 Logger.Error("未发现设备，请确认设备和驱动程序已正确安装", "错误");
                 Logger.Error("未发现设备，请确认设备和驱动程序已正确安装");
-                return -1;
+
             }
-            return 0;
-            #endif
+            return deviceStatusManger.deviceList;
         }
 
         private static int InitCard(uint unCardIdx)
@@ -256,6 +269,70 @@ namespace TCP.Command
             {
                 Logger.Error(string.Concat("时钟频率错误 ", Convert.ToString(DeviceStatsManager.Instance.SampleRate), " ", Convert.ToString(OutFreq)), "ERROR");
                 return -1;
+            }
+            return 0;
+        }
+
+        public static int IntializerAll()
+        {
+            InitializerMem();
+            DeviceStatsManager.Instance.WorkParams = new FormalParams[DeviceStatsManager.Instance.NoBoard, 2];
+
+            return 0;
+
+        }
+
+        private static void InitializerMem()
+        {
+            CallBackBuffer = new IntPtr[DeviceStatsManager.Instance.NoBoard];
+            CallBackFFTBuffer = new IntPtr[DeviceStatsManager.Instance.NoBoard];
+            for (int n = 0; n < DeviceStatsManager.Instance.NoBoard; n++)
+            {
+                CallBackBuffer[n] = Marshal.AllocHGlobal(PackLenB * PackNum);
+                CallBackFFTBuffer[n] = Marshal.AllocHGlobal(PackLenB * PackNum);
+            }
+            //回调函数内部用于接收数据的空间
+            DDCCBBuf = new byte[PackLenB * PackNum];
+            FFTCBBuf = new byte[PackLenB * PackNum];
+            DDCPackCnt = new uint[DeviceStatsManager.Instance.NoBoard];
+            FFTPackCnt = new uint[DeviceStatsManager.Instance.NoBoard];
+
+        }
+
+        public static void CleanMem()
+        {
+            for (int n = 0; n < DeviceStatsManager.Instance.NoBoard; n++)
+            {
+                Marshal.FreeHGlobal(CallBackBuffer[n]);
+                Marshal.FreeHGlobal(CallBackFFTBuffer[n]);
+            }
+        }
+
+        private static int LoadConfig()
+        {
+            try
+            {
+                DeviceStatsManager.Instance.EnALG = (int.Parse(ConfigurationManager.AppSettings["EnALG"]) > 0) ? true : false;
+                DeviceStatsManager.Instance.EnDUC = (int.Parse(ConfigurationManager.AppSettings["EnDUC"]) > 0) ? true : false;
+                DeviceStatsManager.Instance.EnSim = (int.Parse(ConfigurationManager.AppSettings["EnSim"]) > 0) ? true : false;
+                DeviceStatsManager.Instance.AdcBaseAddr = Convert.ToUInt32(ConfigurationManager.AppSettings["AdcBaseAddr"], 16);
+                DeviceStatsManager.Instance.DdcPulseUnit = Convert.ToUInt32(ConfigurationManager.AppSettings["DdcPulseUnit"], 16);
+                for (int i = 0; i < 32; i++)
+                {
+                    DeviceStatsManager.Instance.AdcUsrReg[i] = Convert.ToUInt32(ConfigurationManager.AppSettings[string.Format("AdcUsrReg[{0}]", i)], 16);
+                }
+                DeviceStatsManager.Instance.DacBaseAddr = Convert.ToUInt32(ConfigurationManager.AppSettings["DacBaseAddr"], 16);
+                DeviceStatsManager.Instance.DucPulseUnit = Convert.ToUInt32(ConfigurationManager.AppSettings["DucPulseUnit"], 16);
+                for (int i = 0; i < 32; i++)
+                {
+                    DeviceStatsManager.Instance.DacUsrReg[i] = Convert.ToUInt32(ConfigurationManager.AppSettings[string.Format("DacUsrReg[{0}]", i)], 16);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(string.Format("{0} in LoadConfig()", ex.Message), "ERROR");
+                return -1;
+                //throw;
             }
             return 0;
         }

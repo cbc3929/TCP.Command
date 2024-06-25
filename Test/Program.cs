@@ -8,6 +8,7 @@
             //设置
             //_ =tester.SendCommandAsync(":SOURce1:FREQuency:VALue 140MHz");
             _ = tester.SendCommandAsync(":SOURce1:BB:ARB:SRATe:VALue 256ksps");
+            Console.WriteLine();
             //_ = tester.SendCommandAsync(":SOURce1:BB:ARB:SWITCH On");
             //_ = tester.SendCommandAsync(":OUTPut1:RF:SWITCH On");
 

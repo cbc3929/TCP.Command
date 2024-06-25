@@ -56,7 +56,14 @@ namespace TCP.Command
         {
             NetworkStream stream = client.GetStream();
             byte[] responseBytes = Encoding.UTF8.GetBytes(message);
-            await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
+            try
+            {
+                await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
+            }
+            catch (Exception ex) 
+            {
+                Logger.Error(ex);
+            }
         }
         /// <summary>
         /// 客户端连接

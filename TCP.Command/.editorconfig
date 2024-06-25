@@ -1,0 +1,14 @@
+# EditorConfig is awesome: https://EditorConfig.org
+
+# top-most EditorConfig file
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+[*.cs]
+indent_style = space
+indent_size = 4
+tab_width = 4

@@ -23,19 +23,34 @@ namespace Test
 
         public async Task SendCommandAsync(string command)
         {
-            using (var client = new TcpClient(_serverIp, _serverPort))
-            using (var stream = client.GetStream())
+            try
             {
-                // Convert the command to a byte array and send it to the server
-                byte[] commandBytes = Encoding.UTF8.GetBytes(command);
-                await stream.WriteAsync(commandBytes, 0, commandBytes.Length);
+                using (var client = new TcpClient())
+                {
+                    Console.WriteLine("Connecting to server...");
+                    await client.ConnectAsync(_serverIp, _serverPort);
 
-                // Wait for the server's response and read it
-                byte[] responseBuffer = new byte[4096];
-                int bytesRead = await stream.ReadAsync(responseBuffer, 0, responseBuffer.Length);
-                string response = Encoding.UTF8.GetString(responseBuffer, 0, bytesRead);
+                    using (var stream = client.GetStream())
+                    {
+                        // Convert the command to a byte array and send it to the server
+                        byte[] commandBytes = Encoding.UTF8.GetBytes(command);
+                        Console.WriteLine("Sending command to server...");
+                        await stream.WriteAsync(commandBytes, 0, commandBytes.Length);
+                        Console.WriteLine("Command sent.");
 
-                Console.WriteLine($"Server response: {response}");
+                        // Wait for the server's response and read it
+                        byte[] responseBuffer = new byte[4096];
+                        int bytesRead = await stream.ReadAsync(responseBuffer, 0, responseBuffer.Length);
+                        string response = Encoding.UTF8.GetString(responseBuffer, 0, bytesRead);
+
+                        Console.WriteLine($"Server response: {response}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"An error occurred: {ex.Message}");
+                Console.WriteLine(ex.StackTrace);
             }
         }
     }
