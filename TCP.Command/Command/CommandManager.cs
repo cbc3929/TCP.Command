@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using TCP.Command.Interface;
 
-namespace TCP.Command
+namespace TCP.Command.Command
 {
     public class CommandManager
     {
@@ -15,7 +15,7 @@ namespace TCP.Command
 
         private ConcurrentStack<ICommand> commandHistory = new ConcurrentStack<ICommand>();
 
-        public void EnquueCommand(ICommand command) 
+        public void EnquueCommand(ICommand command)
         {
             commandQueue.Enqueue(command);
         }
@@ -33,7 +33,8 @@ namespace TCP.Command
                     }
                     catch (Exception ex)
                     {
-                        while (!commandHistory.IsEmpty) {
+                        while (!commandHistory.IsEmpty)
+                        {
                             Console.WriteLine("Error executing command: " + ex.Message);
                             Console.WriteLine("Undo commands ...");
                             if (commandHistory.TryPop(out ICommand undoCommand))
@@ -42,7 +43,7 @@ namespace TCP.Command
                             }
                         }
                         throw;
-                        
+
                     }
                 }
             }

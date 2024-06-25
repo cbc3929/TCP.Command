@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 
-namespace TCP.Command
+namespace TCP.Command.Interface
 {
-    
+
 
     public class EventBus
     {

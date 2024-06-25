@@ -1,6 +1,7 @@
 ﻿using NLog.Config;
 using NLog.Targets;
 using NLog;
+using TCP.Command.PCIE;
 
 namespace TCP.Command
 {
@@ -10,8 +11,8 @@ namespace TCP.Command
         static void Main(string[] args)
         {
             ConfigureNLog();
-            var list =HardWareInitializer.GetDeviceList();
-            if (list.Count == 0) 
+            var list = HardWareInitializer.GetDeviceList();
+            if (list.Count == 0)
             {
                 Logger.Error("未能查找到设备，请检查硬件连接或驱动！");
                 return;

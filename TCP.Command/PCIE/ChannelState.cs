@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace TCP.Command
+namespace TCP.Command.PCIE
 {
     public class ChannelState
     {

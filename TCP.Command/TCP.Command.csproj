@@ -22,18 +22,22 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="dotNetQTDrv.dll">
+    <None Update="DLL\dotNetQTDrv.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="dotNetQTDrvImport.dll">
+    <None Update="DLL\dotNetQTDrvImport.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="QTApi.dll">
+    <None Update="DLL\QTApi.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="QT_Pcix.dll">
+    <None Update="DLL\QT_Pcix.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Config\" />
   </ItemGroup>
 
 </Project>

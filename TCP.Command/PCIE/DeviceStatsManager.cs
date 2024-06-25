@@ -8,6 +8,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using TCP.Command.PCIE;
 using static BackgroundTaskManager;
 
 namespace TCP.Command
@@ -98,6 +99,7 @@ namespace TCP.Command
             CallBackFFTData = new dotNetQTDrv.FFTCallBackHandle[2];
             CallBackUserEvent = new dotNetQTDrv.PUSEREVENT_CALLBACK[1];
             CallBackUserEvent[0] = CallBackFunc_UserEvent_DA;
+            Logger.Info("DeviceStatsManager is created.Memory has been used");
         }
         public static DeviceStatsManager Instance =>_instance.Value;
 

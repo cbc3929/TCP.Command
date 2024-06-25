@@ -11,7 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using static BackgroundTaskManager;
 
-namespace TCP.Command
+namespace TCP.Command.PCIE
 {
     public static class HardWareInitializer
     {
@@ -32,9 +32,11 @@ namespace TCP.Command
         {
 
             var deviceStatusManger = DeviceStatsManager.Instance;
-
-
-
+            deviceStatusManger.deviceList.Add("VitrulPcieCard0");
+            deviceStatusManger.deviceList.Add("VitrulPcieCard1");
+            return deviceStatusManger.deviceList;
+#if DEBUG
+#else
             //dBm_offset[1, 0] = 0;
 
             for (uint i = 0; i < 2; i++)
@@ -53,12 +55,12 @@ namespace TCP.Command
                     var temp_NOB = deviceStatusManger.NOB;
                     var temp_devmaxsampleRate = deviceStatusManger.DevMaxSampleRate;
                     var temp_adda = deviceStatusManger.adda_revision;
-                    dotNetQTDrv.QTGetRegs_i32(i, (uint)Regs.product_number, ref temp_number);
-                    dotNetQTDrv.QTGetRegs_i32(i, (uint)Regs.bForceIOdelay, ref temp_bforce);
-                    dotNetQTDrv.QTGetRegs_i32(i, (uint)Regs.couple_type, ref temp_couple);
-                    dotNetQTDrv.QTGetRegs_i32(i, (uint)Regs.lResolution, ref temp_NOB);
-                    dotNetQTDrv.QTGetRegs_i32(i, (uint)Regs.SRate, ref temp_devmaxsampleRate);
-                    dotNetQTDrv.QTGetRegs_i32(i, (uint)Regs.adda_revision, ref temp_adda);
+                    dotNetQTDrv.QTGetRegs_i32(i, Regs.product_number, ref temp_number);
+                    dotNetQTDrv.QTGetRegs_i32(i, Regs.bForceIOdelay, ref temp_bforce);
+                    dotNetQTDrv.QTGetRegs_i32(i, Regs.couple_type, ref temp_couple);
+                    dotNetQTDrv.QTGetRegs_i32(i, Regs.lResolution, ref temp_NOB);
+                    dotNetQTDrv.QTGetRegs_i32(i, Regs.SRate, ref temp_devmaxsampleRate);
+                    dotNetQTDrv.QTGetRegs_i32(i, Regs.adda_revision, ref temp_adda);
                     deviceStatusManger.product_number = temp_number;
                     deviceStatusManger.bForceIOdelay = temp_bforce;
                     deviceStatusManger.couple_type = temp_couple;
@@ -107,7 +109,7 @@ namespace TCP.Command
                                 }
                                 else
                                 {
-                                    Logger.Info(String.Format("初始化失败！0x{0:x}", ret));
+                                    Logger.Info(string.Format("初始化失败！0x{0:x}", ret));
                                 }
                             }
                             else
@@ -122,7 +124,7 @@ namespace TCP.Command
                             return DeviceStatsManager.Instance.deviceList;
 
                     }
-                    Logger.Info(String.Concat("发现设备:" + device));
+                    Logger.Info(string.Concat("发现设备:" + device));
                     deviceStatusManger.deviceList.Add(device);
                 }
                 else if (nRet == Error.RES_ERROR_PRODUCT_INFO_UNDEF)
@@ -145,6 +147,7 @@ namespace TCP.Command
 
             }
             return deviceStatusManger.deviceList;
+#endif
         }
 
         private static int InitCard(uint unCardIdx)
@@ -152,7 +155,7 @@ namespace TCP.Command
             var deviceStatusManager = DeviceStatsManager.Instance;
             //////////////////////////////////////////////////////////////////////////
             //----Clock parameters
-            double RangeVolt = (double)Comm.QTFM_INPUT_RANGE_1;           // 输入档位选择，取值QTFM_INPUT_RANGE_1~4 对应输入档位由小到大
+            double RangeVolt = Comm.QTFM_INPUT_RANGE_1;           // 输入档位选择，取值QTFM_INPUT_RANGE_1~4 对应输入档位由小到大
             double OffsetVolt = 0;                                           // 偏置设置，取值范围[-full-calce,+full-scale],单位uV
                                                                              //////////////////////////////////////////////////////////////////////////
             ld_ChkRT(dotNetQTDrv.QTSetRegs_i32(unCardIdx, Regs.uiErrCode, 0), "错误清零");
@@ -161,7 +164,7 @@ namespace TCP.Command
             ld_ChkRT(dotNetQTDrv.QTResetBoard(unCardIdx), "复位板卡");
             //----获取板卡型号
             var temp_number = deviceStatusManager.product_number;
-            ld_ChkRT(dotNetQTDrv.QTGetRegs_i32(unCardIdx, (uint)Regs.product_number, ref temp_number), "读取产品编码");
+            ld_ChkRT(dotNetQTDrv.QTGetRegs_i32(unCardIdx, Regs.product_number, ref temp_number), "读取产品编码");
             deviceStatusManager.product_number = temp_number;
             //////////////////////////////////////////////////////////////////////////
             //Take max sample rate as default. Users feel free to change it by uncomment this line then assign new value.
@@ -188,13 +191,13 @@ namespace TCP.Command
                 {
                     if (deviceStatusManager.EnDACWork > 0)
                     {
-                        if (ChkFreq(unCardIdx, (uint)deviceStatusManager.SampleRate, 1) == -1)//检查DAC时钟频率
+                        if (ChkFreq(unCardIdx, deviceStatusManager.SampleRate, 1) == -1)//检查DAC时钟频率
                             return -1;
                     }
                 }
             }
             var temp_bforceiodelay = 0;
-            ld_ChkRT(dotNetQTDrv.QTGetRegs_i32(unCardIdx, (uint)Regs.bForceIOdelay, ref temp_bforceiodelay), "读取IOdelay标志");
+            ld_ChkRT(dotNetQTDrv.QTGetRegs_i32(unCardIdx, Regs.bForceIOdelay, ref temp_bforceiodelay), "读取IOdelay标志");
             deviceStatusManager.bForceIOdelay = temp_bforceiodelay;
             //----Setup AFE
             if (deviceStatusManager.product_number != 0x1125)
@@ -209,7 +212,7 @@ namespace TCP.Command
             }
             //----Setup Input range and offset
             int couple_type = 0;
-            ld_ChkRT(dotNetQTDrv.QTGetRegs_i32(unCardIdx, (uint)Regs.couple_type, ref couple_type), "读取耦合方式");
+            ld_ChkRT(dotNetQTDrv.QTGetRegs_i32(unCardIdx, Regs.couple_type, ref couple_type), "读取耦合方式");
             if (couple_type == 0xDC)
             {
                 //----Set analog input range first then offset
@@ -263,8 +266,8 @@ namespace TCP.Command
             Rdval = 0;
             Thread.Sleep(100);
             dotNetQTDrv.QTReadRegister(unCardIdx, ref BaseAddr, ref Offset, ref Rdval);
-            Int32 OutFreq = Convert.ToInt32(Rdval) >> 16;
-            long err = System.Math.Abs(samplerate / 1000000 / Srate2Fadc - OutFreq);
+            int OutFreq = Convert.ToInt32(Rdval) >> 16;
+            long err = Math.Abs(samplerate / 1000000 / Srate2Fadc - OutFreq);
             if (err > 2)
             {
                 Logger.Error(string.Concat("时钟频率错误 ", Convert.ToString(DeviceStatsManager.Instance.SampleRate), " ", Convert.ToString(OutFreq)), "ERROR");
@@ -284,8 +287,8 @@ namespace TCP.Command
 
         private static void InitializerMem()
         {
-            CallBackBuffer = new IntPtr[DeviceStatsManager.Instance.NoBoard];
-            CallBackFFTBuffer = new IntPtr[DeviceStatsManager.Instance.NoBoard];
+            CallBackBuffer = new nint[DeviceStatsManager.Instance.NoBoard];
+            CallBackFFTBuffer = new nint[DeviceStatsManager.Instance.NoBoard];
             for (int n = 0; n < DeviceStatsManager.Instance.NoBoard; n++)
             {
                 CallBackBuffer[n] = Marshal.AllocHGlobal(PackLenB * PackNum);
@@ -312,9 +315,9 @@ namespace TCP.Command
         {
             try
             {
-                DeviceStatsManager.Instance.EnALG = (int.Parse(ConfigurationManager.AppSettings["EnALG"]) > 0) ? true : false;
-                DeviceStatsManager.Instance.EnDUC = (int.Parse(ConfigurationManager.AppSettings["EnDUC"]) > 0) ? true : false;
-                DeviceStatsManager.Instance.EnSim = (int.Parse(ConfigurationManager.AppSettings["EnSim"]) > 0) ? true : false;
+                DeviceStatsManager.Instance.EnALG = int.Parse(ConfigurationManager.AppSettings["EnALG"]) > 0 ? true : false;
+                DeviceStatsManager.Instance.EnDUC = int.Parse(ConfigurationManager.AppSettings["EnDUC"]) > 0 ? true : false;
+                DeviceStatsManager.Instance.EnSim = int.Parse(ConfigurationManager.AppSettings["EnSim"]) > 0 ? true : false;
                 DeviceStatsManager.Instance.AdcBaseAddr = Convert.ToUInt32(ConfigurationManager.AppSettings["AdcBaseAddr"], 16);
                 DeviceStatsManager.Instance.DdcPulseUnit = Convert.ToUInt32(ConfigurationManager.AppSettings["DdcPulseUnit"], 16);
                 for (int i = 0; i < 32; i++)

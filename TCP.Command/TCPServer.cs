@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using TCP.Command.Interface;
 using TCP.Command.PCIE;
 using NLog;
+using TCP.Command.Command;
 
 namespace TCP.Command
 {
