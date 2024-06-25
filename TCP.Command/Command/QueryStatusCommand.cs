@@ -13,20 +13,22 @@ namespace TCP.Command
     {
         private readonly string _commandText;
         private readonly int _channelNumber;
-        private readonly DeviceStatsManager _deviceStatsManager;
         private readonly TCPServer _server;
+        private PcieCard _card;
 
-        public QueryStatusCommand(string commandText, int channelNumber, TCPServer server)
+
+        public QueryStatusCommand(string commandText, int channelNumber, TCPServer server,PcieCard card
+            )
         {
             _commandText = commandText;
             _channelNumber = channelNumber;
             _server = server;
-            _deviceStatsManager = DeviceStatsManager.Instance;
+            _card = card;
         }
 
         public async Task ExecuteAsync(TcpClient client)
         {
-            ChannelState state = _deviceStatsManager.GetChannelState(_channelNumber);
+            ChannelState state = _card.GetChannelState(_channelNumber);
             string response = "";
 
             // 解析并处理查询命令

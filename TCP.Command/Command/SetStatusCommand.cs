@@ -15,16 +15,16 @@ namespace TCP.Command
     {
         private readonly string _commandText;
         private readonly int _channelNumber;
-        private readonly DeviceStatsManager _deviceStatsManager;
         private readonly TCPServer _server;
+        private PcieCard _card;
         //setting command
 
-        public SetStatusCommand(string commandText, int channelNumber, TCPServer server)
+        public SetStatusCommand(string commandText, int channelNumber, TCPServer server,PcieCard card)
         {
             _commandText = commandText;
             _channelNumber = channelNumber;
             _server = server;
-            _deviceStatsManager = DeviceStatsManager.Instance;
+            _card = card;
         }
 
         private string ParseCommandForValue(string command)
@@ -52,7 +52,7 @@ namespace TCP.Command
             {
                 // 设置基带调制开关
                 bool isOn = valueUnitPart.Contains("On") || valueUnitPart.Contains("1") || valueUnitPart.Contains("true");
-                _deviceStatsManager.GetChannelState(_channelNumber).BBSwitch = isOn;
+                _card.GetChannelState(_channelNumber).BBSwitch = isOn;
                 // 发送响应给客户端
                 await _server.SendMsgAsync(client, "BB MODE set to " + (isOn ? "On" : "Off"));
 
@@ -64,7 +64,7 @@ namespace TCP.Command
                 {
                     //TODO 打开射频开关逻辑
                 }
-                _deviceStatsManager.GetChannelState(_channelNumber).RFSwitch = isOn;
+                _card.GetChannelState(_channelNumber).RFSwitch = isOn;
                 await _server.SendMsgAsync(client, "RF SWITCH set to " + (isOn ? "On" : "Off"));
             }
             else if (_commandText.Contains("ARB:SWITCH"))
@@ -73,7 +73,7 @@ namespace TCP.Command
                 
                 _pBconfig.SetARBSwitch((uint)_channelNumber, isOn);
 
-                _deviceStatsManager.GetChannelState(_channelNumber).ARBSwitch = isOn;
+                _card.GetChannelState(_channelNumber).ARBSwitch = isOn;
                 await _server.SendMsgAsync(client, "ARB SWITCH set to " + (isOn ? "On" : "Off"));
             }
             //下发文件
@@ -105,8 +105,8 @@ namespace TCP.Command
                 }
                 if (long.TryParse(valueStr, out long value))
                 {
-                    _deviceStatsManager.GetChannelState(_channelNumber).FreqValue = value * subUnitValue;
-                    _deviceStatsManager.GetChannelState(_channelNumber).FreqSubUnit = subUnit;
+                    _card.GetChannelState(_channelNumber).FreqValue = value * subUnitValue;
+                    _card.GetChannelState(_channelNumber).FreqSubUnit = subUnit;
                     await _server.SendMsgAsync(client, "Frequency set to " + value + subUnit + "Hz");
                     _pBconfig.SetFreqValue((uint)_channelNumber, value * subUnitValue);
                 }
@@ -120,11 +120,11 @@ namespace TCP.Command
                 int unitStartIndex = valueUnitPart.IndexOf("dBm");
                 string valueStr = valueUnitPart.Substring(0, unitStartIndex);
                 int value = int.Parse(valueStr);
-                var state = _deviceStatsManager.GetChannelState(_channelNumber);
+                var state = _card.GetChannelState(_channelNumber);
                 if (state != null)
                 {
                     state.Power = value;
-                    _deviceStatsManager.SetChannelState(_channelNumber, state);
+                    _card.SetChannelState(_channelNumber, state);
                 }
                 _pBconfig.SetPowerValue((uint)_channelNumber, value);
             }
@@ -134,7 +134,7 @@ namespace TCP.Command
                 string subType = _commandText.Substring(typeStartPos + 9, 3);
                 if (subType == "SIN")
                 {
-                    var state = _deviceStatsManager.GetChannelState(_channelNumber);
+                    var state = _card.GetChannelState(_channelNumber);
                     if (state != null)
                     {
                         state.PlaybackMethod = "SIN";
@@ -144,7 +144,7 @@ namespace TCP.Command
                 }
                 else if (subType == "TIC")
                 {
-                    var state = _deviceStatsManager.GetChannelState(_channelNumber);
+                    var state = _card.GetChannelState(_channelNumber);
                     if (state != null)
                     {
                         state.PlaybackMethod = "TIC";
@@ -154,7 +154,7 @@ namespace TCP.Command
                 }
                 else if (subType == "REP")
                 {
-                    var state = _deviceStatsManager.GetChannelState(_channelNumber);
+                    var state = _card.GetChannelState(_channelNumber);
                     if (state != null)
                     {
                         state.PlaybackMethod = "REP";
@@ -187,8 +187,8 @@ namespace TCP.Command
                 }
                 if (long.TryParse(valueStr, out long value))
                 {
-                    _deviceStatsManager.GetChannelState(_channelNumber).Srate = value * subUnitValue;
-                    _deviceStatsManager.GetChannelState(_channelNumber).SampSubUnit = subUnit;
+                    _card.GetChannelState(_channelNumber).Srate = value * subUnitValue;
+                    _card.GetChannelState(_channelNumber).SampSubUnit = subUnit;
                     await _server.SendMsgAsync(client, "Sample rate set to " + value + subUnit + "Hz");
                     _pBconfig.SetSRateValue((uint)_channelNumber, value * subUnitValue);
                 }
