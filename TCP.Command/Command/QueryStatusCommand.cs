@@ -36,7 +36,7 @@ namespace TCP.Command
             if (_commandText.Contains(":BB:MODE"))
             {
                 value = state.BBSwitch ? "On" : "Off";
-                var commandtype = "MODE";
+                commandType = "MODE";
                 
             }
             else if (_commandText.Contains(":BB:ARB:SRATe"))
