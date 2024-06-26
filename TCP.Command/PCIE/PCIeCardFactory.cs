@@ -29,7 +29,6 @@ namespace TCP.Command.PCIE
         }
         public static List<PcieCard> GetDeviceList()
         {
-
             //var deviceStatusManger = NBDeviceStatsManager.Instance;
             //deviceStatusManger.deviceList.Add("VitrulPcieCard0");
             //deviceStatusManger.deviceList.Add("VitrulPcieCard1");

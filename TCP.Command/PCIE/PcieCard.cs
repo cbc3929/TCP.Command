@@ -136,10 +136,19 @@ namespace TCP.Command.PCIE
         protected void InitializeChannelDependentArrays()
         {
             ChannelStates = new ChannelState[ChannelNumber];
+            for (int i = 0; i < ChannelNumber; i++)
+            {
+                ChannelStates[i] = new ChannelState();
+            }
             Len = new int[ChannelNumber];
             NotifySizeB = new uint[ChannelNumber];
             RepKeepRun = new int[ChannelNumber];
         }
+
+        //protected void InitializeChannelStates()
+        //{
+        //    ChannelStates = new ChannelState[ChannelNumber];
+        //}
         private void CallBackFunc_UserEvent_DA(int UserEventAddr)
         {
             //软件定义中断使能

@@ -20,7 +20,7 @@ namespace TCP.Command
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private TcpListener tcpListener;
         private bool isRunning;
-        private TcpClient currentClient;
+        private static TcpClient currentClient;
         private readonly object lockObject = new object();
         private CommandManager commandQueueManager = new CommandManager();
         private PBConfig pBConfig;
@@ -53,9 +53,10 @@ namespace TCP.Command
         /// <param name="client"></param>
         /// <param name="message"></param>
         /// <returns></returns>
-        public async Task SendMsgAsync(TcpClient client, string message)
+        public static async Task SendMsgAsync(string commandType,int channelNumber,string value)
         {
-            NetworkStream stream = client.GetStream();
+            var message = ":REPLAY"+channelNumber+":TYPE"+commandType+":VALUE"+value;
+            NetworkStream stream = currentClient.GetStream();
             byte[] responseBytes = Encoding.UTF8.GetBytes(message);
             try
             {

@@ -28,5 +28,21 @@ namespace TCP.Command.PCIE
         public char SampSubUnit { get; set; }
 
         public string PlaybackMethod { get; set; }
+
+        public ChannelState() 
+        {
+            Srate = 0;
+            ARBSwitch = false;
+            BBSwitch = false;
+            RFSwitch = false;
+            FreqValue = 0;
+            Power = 0;
+            FreqSubUnit = Char.Parse("");
+            SampSubUnit = Char.Parse("");
+            PlaybackMethod = "";
+            singleRunCts = new CancellationTokenSource();
+            loopRunCts = new CancellationTokenSource();
+            monitorCts = new CancellationTokenSource();
+        }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Net.Sockets;
 using System.Text;
@@ -13,59 +14,71 @@ namespace TCP.Command
     {
         private readonly string _commandText;
         private readonly int _channelNumber;
+        private readonly int _originNumber;
         private PcieCard _card;
 
 
-        public QueryStatusCommand(string commandText, int channelNumber,PcieCard card
-            )
+        public QueryStatusCommand(string commandText, int channelNumber,PcieCard card )
         {
             _commandText = commandText;
-            _channelNumber = channelNumber;
+            _originNumber = channelNumber==1?0:channelNumber;
+            _channelNumber = channelNumber==1?channelNumber:channelNumber-2;
             _card = card;
         }
 
         public async Task ExecuteAsync()
         {
             ChannelState state = _card.GetChannelState(_channelNumber);
-            string response = "";
+            string value = "";
+            string commandType = "";
 
             // 解析并处理查询命令
             if (_commandText.Contains(":BB:MODE"))
             {
-                response = state.BBSwitch ? "On" : "Off";
+                value = state.BBSwitch ? "On" : "Off";
+                var commandtype = "MODE";
+                
             }
             else if (_commandText.Contains(":BB:ARB:SRATe"))
             {
-                response = state.Srate.ToString() + state.SampSubUnit + "Hz";
+                value = state.Srate.ToString() + state.SampSubUnit + "Hz";
+                commandType = "SRATe";
             }
             else if (_commandText.Contains(":BB:ARB:SWITCH"))
             {
-                response = state.ARBSwitch ? "On" : "Off";
+                value = state.ARBSwitch ? "On" : "Off";
+                commandType = "ARB";
             }
             else if (_commandText.Contains(":RF:SWITCH"))
             {
-                response = state.RFSwitch ? "On" : "Off";
+                value = state.RFSwitch ? "On" : "Off";
+                commandType = "RF";
             }
             else if (_commandText.Contains(":RF:PEP"))
             {
-                response = state.Power.ToString() + "dBm";
+                value = state.Power.ToString() + "dBm";
+                commandType = "PEP";
             }
             else if (_commandText.Contains(":FREQuency"))
             {
-                response = state.FreqValue.ToString() + state.FreqSubUnit + "Hz";
+                value = state.FreqValue.ToString() + state.FreqSubUnit + "Hz";
+                commandType = "FREQUENCY";
             }
             else if (_commandText.Contains(":POWer"))
             {
-                response = state.Power.ToString() + "dBm";
+                value = state.Power.ToString() + "dBm";
+                commandType = "POWER";
             }
             else if (_commandText.Contains(":PLAYBACK"))
             {
-                response = state.PlaybackMethod;
+                value = state.PlaybackMethod;
+                commandType = "PLAYBACK";
             }
             else
             {
-                response = "Unknown command";
+                value = "Unknown command";
             }
+            await TCPServer.SendMsgAsync(commandType, _originNumber, value);
         }
 
 

@@ -47,7 +47,6 @@ namespace TCP.Command
                     case "REP":
                         return new LoopRunCommand(card, chanNum); 
                 }
-                
             }
             else
             {
