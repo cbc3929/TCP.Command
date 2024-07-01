@@ -1,72 +1,197 @@
-﻿using System.IO;
+﻿using System.Globalization;
+using System.IO;
+using System.Net.WebSockets;
 
 namespace Test
 {
     public class Program
     {
-        static void Main(string[] args)
+        static void Main()
         {
-            //var tester = new TcpServerTester();
-            //设置
-            //_ =tester.SendCommandAsync(":SOURce1:FREQuency:VALue 140MHz");
-            //_ = tester.SendCommandAsync(":SOURce1:BB:ARB:SRATe:VALue 256ksps");
-            //Console.WriteLine();
-            //_ = tester.SendCommandAsync(":SOURce1:BB:ARB:SWITCH On");
-            //_ = tester.SendCommandAsync(":OUTPut1:RF:SWITCH On");
+            double radio = 23.0001; // 例子值，可以替换为需要的值
+            var (large, small, precision, compromised, originalLarge, originalSmall, originalRatio, originalPrecision) = FindClosestFractionSS(radio);
+            double actualRatio = (double)large / small;
 
-            var names = "d:\\WD03_256k_filted_Dealed.bin";
-            //查询
-            //_ = tester.SendCommandAsync(":SOURce1:BB:ARB:SWITCH ?");
-            using (FileStream stream = new FileStream(names, FileMode.Open, FileAccess.Read))
+            Console.WriteLine($"Large: {large}");
+            Console.WriteLine($"Small: {small}");
+            Console.WriteLine($"Actual Ratio: {actualRatio}");
+            Console.WriteLine($"Desired Ratio: {radio}");
+            Console.WriteLine($"Precision Achieved: {precision} decimal places");
+            if (compromised)
             {
-                if (stream != null)
+                Console.WriteLine("Precision was compromised to achieve a larger value.");
+                Console.WriteLine($"Original Large: {originalLarge}");
+                Console.WriteLine($"Original Small: {originalSmall}");
+                Console.WriteLine($"Original Ratio: {originalRatio}");
+                Console.WriteLine($"Original Precision: {originalPrecision} decimal places");
+            }
+        }
+
+        static bool IsSignificantDifference(SortedList<double, (int, int)> ratioList, double ratio, double threshold)
+        {
+            foreach (var storedRatio in ratioList.Keys)
+            {
+                if (Math.Abs(storedRatio - ratio) < threshold)
                 {
-                    // 定义每次读取的字节长度
-                    int readByteLength = 1000 * 32;
-                    byte[] buffer = new byte[readByteLength];
-                    Int16[] outdata = new short[readByteLength / 2];
+                    return false;
+                }
+            }
+            return true;
+        }
 
-                    uint maxValue = 0;
-                    uint currentValue = 0;
 
-                    // 循环读取文件，直到文件结束
-                    int bytesRead;
-                    while ((bytesRead = stream.Read(buffer, 0, readByteLength)) > 0)
+        public static long interept(long a, long b)
+        {
+            var c = a % b;
+            if (c == 0)
+            {
+                return b;
+            }
+            else
+            {
+                return interept(b, c);
+            }
+        }
+
+        static (int, int, int) FindClosestFraction(double radio)
+        {
+            int maxLarge = 16384;
+            int precision = 10;
+
+            while (precision > 0)
+            {
+                for (int small = 1; small <= maxLarge; small++)
+                {
+                    int large = (int)Math.Round(radio * small);
+                    if (large > 0 && large <= maxLarge)
                     {
-                        // 根据读取的字节数调整outdata的大小
-                        int shortCount = bytesRead / 2;
-                        if (bytesRead < readByteLength)
+                        double actualRatio = (double)large / small;
+                        if (Math.Abs(actualRatio - radio) < Math.Pow(10, -precision))
                         {
-                            outdata = new short[shortCount];
-                        }
-
-                        // 将字节缓冲区转换为16位有符号整数数组
-                        Buffer.BlockCopy(buffer, 0, outdata, 0, bytesRead); // 元素个数缩小一半
-
-                        // 获取绝对值最大值作为PEP参考值
-                        for (int index = 0; index < shortCount; ++index)
-                        {
-                            currentValue = (uint)Math.Abs(outdata[index]);
-                            if (maxValue < currentValue)
-                            {
-                                maxValue = currentValue;
-                            }
+                            return (large, small, precision);
                         }
                     }
-
-                    Console.WriteLine("最大值: " + maxValue);
-
-                    // 假设 SendCommandAsync 方法是异步的，且你需要传递读取到的数据
-                    // 示例：_ = await tester.SendCommandAsync(":SOURce1:BB:ARB:SWITCH ?", buffer);
-
-                    Console.WriteLine("文件读取成功.");
                 }
-                else
+                precision--;
+            }
+
+            // 如果找不到符合条件的值，返回一个默认值
+            return (0, 0, 0);
+        }
+
+        public static (int, int, int) FindClosestFractionNew(double radio)
+        {
+            int maxLarge = 16384;
+            int bestLarge = 16383;
+            int bestSmall = 1;
+            double closestDifference = double.MaxValue;
+
+            for (int small = 1; small <= maxLarge; small++)
+            {
+                int large = (int)Math.Round(radio * small);
+                if (large > 0 && large <= maxLarge)
                 {
-                    Console.WriteLine("无法打开文件.");
+                    double actualRatio = (double)large / small;
+                    double difference = Math.Abs(actualRatio - radio);
+
+                    if (difference < closestDifference)
+                    {
+                        closestDifference = difference;
+                        bestLarge = large;
+                        bestSmall = small;
+                    }
+
+                    if (difference < Math.Pow(10, -10))
+                    {
+                        return (large, small, 10);
+                    }
                 }
             }
 
+            return (bestLarge, bestSmall, (int)Math.Floor(-Math.Log10(closestDifference)));
         }
+
+        public static (int, int, int, bool, int, int, double, int) FindClosestFractionSS(double radio)
+        {
+            int maxLarge = 16384;
+            int bestLarge = 0;
+            int bestSmall = 0;
+            int finalPrecision = 0;
+            double closestDifference = double.MaxValue;
+            int originalLarge = 0;
+            int originalSmall = 0;
+            double originalRatio = 0.0;
+            int originalPrecision = 0;
+            bool precisionCompromised = false;
+
+            // 如果radio是整数，直接计算最大精度情况
+            if (radio == (int)radio)
+            {
+                bestLarge = (int)radio;
+                bestSmall = 1;
+                finalPrecision = 15; // 最大精度
+                return (bestLarge, bestSmall, finalPrecision, precisionCompromised, originalLarge, originalSmall, originalRatio, originalPrecision);
+            }
+
+            for (int small = 1; small <= maxLarge; small++)
+            {
+                int large = (int)Math.Round(radio * small);
+                if (large > 0 && large <= maxLarge)
+                {
+                    double actualRatio = (double)large / small;
+                    double difference = Math.Abs(actualRatio - radio);
+
+                    if (difference < closestDifference)
+                    {
+                        closestDifference = difference;
+                        bestLarge = large;
+                        bestSmall = small;
+                        finalPrecision = (int)Math.Floor(-Math.Log10(difference));
+
+                        if (finalPrecision >= 10)
+                        {
+                            return (bestLarge, bestSmall, finalPrecision, precisionCompromised, originalLarge, originalSmall, originalRatio, originalPrecision);
+                        }
+                    }
+                }
+            }
+
+            originalLarge = bestLarge;
+            originalSmall = bestSmall;
+            originalRatio = (double)bestLarge / bestSmall;
+            originalPrecision = finalPrecision;
+
+            for (int precision = finalPrecision - 1; precision >= 4; precision--)
+            {
+                for (int small = 1; small <= maxLarge; small++)
+                {
+                    int large = (int)Math.Round(radio * small);
+                    if (large > 0 && large <= maxLarge)
+                    {
+                        double actualRatio = (double)large / small;
+                        double difference = Math.Abs(actualRatio - radio);
+
+                        if (Math.Abs(difference - Math.Pow(10, -precision)) < Math.Pow(10, -precision + 1))
+                        {
+                            if (large > bestLarge && (large - originalLarge) > 1000)
+                            {
+                                bestLarge = large;
+                                bestSmall = small;
+                                finalPrecision = precision;
+                                precisionCompromised = true;
+
+                                if (finalPrecision <= originalPrecision - 2)
+                                {
+                                    return (bestLarge, bestSmall, finalPrecision, precisionCompromised, originalLarge, originalSmall, originalRatio, originalPrecision);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return (bestLarge, bestSmall, finalPrecision, precisionCompromised, originalLarge, originalSmall, originalRatio, originalPrecision);
+        }
+
     }
 }
