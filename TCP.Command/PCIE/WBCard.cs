@@ -10,6 +10,12 @@ namespace TCP.Command.PCIE
     {
         public WBCard( uint cardIndex,int numberofcards) : base(cardIndex,1, numberofcards)
         {
+            FS = 1200000000;
+        }
+
+        public override void CaculateFIR()
+        {
+            throw new NotImplementedException();
         }
 
         public override void CancelOperations(int channelNo)
@@ -19,7 +25,7 @@ namespace TCP.Command.PCIE
 
         public override int Initialize(uint uncardIndex)
         {
-            throw new NotImplementedException();
+            return 0;
         }
 
         public override void OnOperationCompleted(int channelNo)

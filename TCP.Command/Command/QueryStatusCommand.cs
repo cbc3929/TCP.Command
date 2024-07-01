@@ -71,7 +71,18 @@ namespace TCP.Command
             }
             else if (_commandText.Contains(":PLAYBACK"))
             {
-                value = state.PlaybackMethod;
+                switch (state.PlaybackMethod) 
+                {
+                    case PlaybackMethodType.SIN:
+                        value = "SIN";
+                        break;
+                    case PlaybackMethodType.REP:
+                        value = "REP";
+                        break;
+                    case PlaybackMethodType.TIC:
+                        value = "TIC";
+                        break;
+                } 
                 commandType = "PLAYBACK";
             }
             else

@@ -12,14 +12,15 @@ namespace TCP.Command.PCIE
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         public static List<PcieCard> pcieCards = new List<PcieCard>();
+        public static Dictionary<int,PcieCard> CardParam = new Dictionary<int,PcieCard>();
         public static PcieCard CreatePcieCard(uint cardIndex, int productNumber)
         {
             switch (productNumber)
             {
-                case 0x416160B:
+                case 68556299:
                     Logger.Info("窄带" + productNumber.ToString());
                     return new NBCard(cardIndex,2);
-                case 0x416160C:
+                case 68556298:
                     Logger.Info("宽带" + productNumber.ToString());
                     return new WBCard(cardIndex,2);
                 default:
@@ -37,12 +38,29 @@ namespace TCP.Command.PCIE
             //return deviceStatusManger.deviceList;
 
             //dBm_offset[1, 0] = 0;
-            
+#if DEBUG
+            int product_nb_number = 0x416160B;
+            int product_wb_number = 68556298;
+            PcieCard wb_card = CreatePcieCard(0, product_wb_number);
+            PcieCard nb_card = CreatePcieCard(1, product_nb_number);
+            wb_card.Initialize(0);
+            nb_card.Initialize(1);
+            pcieCards.Add(wb_card);
+            pcieCards.Add(nb_card);
+            CardParam.Add(1, wb_card);
+            CardParam.Add(2, nb_card);
+            CardParam.Add(3, nb_card);
+            CardParam.Add(4, nb_card);
+            CardParam.Add(5, nb_card);
+
+
+#else
             for (uint i = 0; i < 2; i++)
             {
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableReplay, 0);
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableStreaming, 1);
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableVfifo, 0);
+                
                 //try to open device
                 uint nRet = (uint)dotNetQTDrv.QTOpenBoard(i);
                 if (nRet == Error.RES_SUCCESS)//find a device
@@ -89,6 +107,14 @@ namespace TCP.Command.PCIE
                     else
                     {
                         pcieCards.Add(card);
+                        if (temp_number == 0x416160B) 
+                        {
+                            CardParam.Add(2, card);
+                            CardParam.Add(3, card);
+                            CardParam.Add(4, card);
+                            CardParam.Add(5, card);
+                        }
+                        else CardParam.Add(1, card);
                     }
                     #region 有点搓,后面再改吧
 
@@ -128,8 +154,15 @@ namespace TCP.Command.PCIE
                 Logger.Error("未发现设备，请确认设备和驱动程序已正确安装");
 
             }
+
+#endif
             return pcieCards;
 
+        }
+        //绝对顺序
+        public static int ConvertChannelNumber(int channelNum)
+        {
+            return channelNum == 1 ? 0 : channelNum - 2;
         }
 
     }

@@ -14,7 +14,6 @@ namespace TCP.Command.Command
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
-
         private ConcurrentQueue<ICommand> commandQueue = new ConcurrentQueue<ICommand>();
 
         private ConcurrentStack<ICommand> commandHistory = new ConcurrentStack<ICommand>();
@@ -23,7 +22,6 @@ namespace TCP.Command.Command
         {
             commandQueue.Enqueue(command);
         }
-
         public async void ProcessCommandsAsync()
         {
             while (!commandQueue.IsEmpty)
@@ -48,7 +46,5 @@ namespace TCP.Command.Command
                 }
             }
         }
-
-
     }
 }

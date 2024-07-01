@@ -18,41 +18,50 @@ namespace TCP.Command
         /// <param name="chanNum">通道号</param>
         /// <param name="tcpServer">tcpserver服务器</param>
         /// <returns></returns>
-        public static ICommand ParseCommand(string commandText,int chanNum)
+        public static ICommand ParseCommand(string commandText,int abschanNum)
         {
-            PcieCard? card = null;
-            //命令过来要发给哪个卡如果是1则是发给宽带，第一号通道
-            if (chanNum == 1)
-            {
-                card = PCIeCardFactory.pcieCards.Find(card => card.DeviceName == "宽带") as WBCard;
-            }
-            else
-            {
-                card = PCIeCardFactory.pcieCards.Find(card => card.DeviceName == "窄带") as NBCard;
-                //转化命令的通道号 和 卡上的通道号
-                chanNum = chanNum - 2;
-            }
+            var card = PCIeCardFactory.CardParam[abschanNum];
+            var chanNum = abschanNum == 1 ? 0 : abschanNum - 2;
             if (commandText.Contains("?"))
             {
                 return new QueryStatusCommand(commandText, chanNum, card);
             }
-            else if(commandText.Contains("PLAYBACK"))
+            else if (commandText.Contains(":BB:MODE"))
             {
-                int typeStartPos = commandText.IndexOf(":PLAYBACK");
-                string subType = commandText.Substring(typeStartPos + 9, 3);
-                switch (subType) 
+                var value = ParseCommandForValue(commandText);
+                if (value.Contains("On") || value.Contains("true") || value.Contains("1"))
                 {
-                    case "SIN":
-                        return new SingleRunCommand(card, chanNum);
-                    case "REP":
-                        return new LoopRunCommand(card, chanNum); 
+                    card.RepKeepRun[chanNum] = 1;
+                    return new LoopRunCommand(abschanNum);
                 }
+                else 
+                {
+                    card.RepKeepRun[chanNum] = 0;
+                    return new BlankCommand();
+                }
+            }
+            else if (commandText.Contains("ARB:SETTing:LOAD")) 
+            {
+                return new SetFileCommand(abschanNum,commandText);
             }
             else
             {
-                return new SetStatusCommand(commandText, chanNum, card);
+                return new SetStatusCommand(commandText, abschanNum);
             }
-            return null;
+        }
+        private static string ParseCommandForValue(string command)
+        {
+            // 解析命令并获取设置值
+            // 这里是一个简单的示例，您需要根据实际的命令格式来实现解析逻辑
+            string[] parts = command.Split(' ');
+            if (parts.Length >= 2)
+            {
+                return parts[1];
+            }
+            else
+            {
+                return "";
+            }
         }
     }
 }

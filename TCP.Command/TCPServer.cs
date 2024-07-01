@@ -20,11 +20,10 @@ namespace TCP.Command
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private TcpListener tcpListener;
         private bool isRunning;
-        private static TcpClient currentClient;
+        private static TcpClient? currentClient;
         private readonly object lockObject = new object();
         private CommandManager commandQueueManager = new CommandManager();
-        private PBConfig pBConfig;
-        private Task[] backgroundTasks;
+        private Task[]? backgroundTasks;
         private CancellationTokenSource cts = new CancellationTokenSource();
 
         private void Log(string message)
@@ -56,10 +55,11 @@ namespace TCP.Command
         public static async Task SendMsgAsync(string commandType,int channelNumber,string value)
         {
             var message = ":REPLAY"+channelNumber+":TYPE"+commandType+":VALUE"+value;
-            NetworkStream stream = currentClient.GetStream();
-            byte[] responseBytes = Encoding.UTF8.GetBytes(message);
+            
             try
             {
+                NetworkStream stream = currentClient.GetStream();
+                byte[] responseBytes = Encoding.UTF8.GetBytes(message);
                 await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
             }
             catch (Exception ex) 

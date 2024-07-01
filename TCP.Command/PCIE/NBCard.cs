@@ -11,13 +11,21 @@ namespace TCP.Command.PCIE
 {
     public class NBCard : PcieCard
     {
+        const int Min_FIR_001 = 4;
+        const int Min_FIR_9_375 = 32;
+        const int Min_FIR_18_75 = 16;
+        const int Min_FIR_37_75 = 8;
+        const int Min_FIR_75 = 4;
+        private int currentFIR = 0;
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         public NBCard(uint cardIndex,int numberofcards) : base(cardIndex,4, numberofcards)
         {
+            FS = 600000000;
         }
 
         public override int Initialize(uint unCardIdx)
         {
+
             double RangeVolt = Comm.QTFM_INPUT_RANGE_1;           // 输入档位选择，取值QTFM_INPUT_RANGE_1~4 对应输入档位由小到大
             double OffsetVolt = 0;                                           // 偏置设置，取值范围[-full-calce,+full-scale],单位uV
                                                                              //////////////////////////////////////////////////////////////////////////
@@ -80,80 +88,6 @@ namespace TCP.Command.PCIE
             return 0;
         }
 
-        public override async Task ExecuteSingleRunAsync(int channelNo)
-        {
-            ChannelStates[channelNo].singleRunCts = new CancellationTokenSource();
-            Logger.Info($"Channel {channelNo} ({DeviceName}): Starting single run operation.");
-            try
-            {
-                await Task.Delay(10000, ChannelStates[channelNo].singleRunCts.Token); // Simulate 10 seconds operation
-            }
-            catch (TaskCanceledException)
-            {
-                Logger.Info($"Channel {channelNo} ({DeviceName}): Single run operation cancelled.");
-            }
-            finally
-            {
-                OnOperationCompleted(channelNo);
-            }
-            Logger.Info($"Channel {channelNo} ({DeviceName}): Single run operation completed.");
-        }
-
-        public async Task ExecuteLoopRunAsync(int channelNo)
-        {
-            if (ChannelStates[channelNo].singleRunCts != null && !ChannelStates[channelNo].singleRunCts.IsCancellationRequested)
-            {
-                Logger.Info($"Channel {channelNo} ({DeviceName}): Waiting for single run to complete.");
-                await Task.Delay(1000); // Wait for single run to complete
-            }
-
-            ChannelStates[channelNo].loopRunCts = new CancellationTokenSource();
-            try
-            {
-                while (!ChannelStates[channelNo].loopRunCts.Token.IsCancellationRequested)
-                {
-                    Logger.Info($"Channel {channelNo} ({DeviceName}): Starting loop run operation.");
-                    await Task.Delay(10000, ChannelStates[channelNo].loopRunCts.Token); // Simulate 10 seconds operation
-                }
-            }
-            catch (TaskCanceledException)
-            {
-                Logger.Info($"Channel {channelNo} ({DeviceName}): Loop run operation cancelled.");
-            }
-            finally
-            {
-                OnOperationCompleted(channelNo);
-            }
-        }
-
-        public async Task MonitorHardwareAsync(Func<bool> cancelCondition, int channelNo)
-        {
-            
-            Logger.Info($"Channel {channelNo} ({DeviceName}): Starting hardware monitoring.");
-            try
-            {
-                while (!ChannelStates[channelNo].monitorCts.Token.IsCancellationRequested)
-                {
-                    await Task.Delay(1000); // Check hardware state every second
-                    if (cancelCondition())
-                    {
-                        Logger.Info($"Channel {channelNo} ({DeviceName}): Cancel condition met. Cancelling operations.");
-                        ChannelStates[channelNo].singleRunCts?.Cancel();
-                        ChannelStates[channelNo].loopRunCts?.Cancel();
-                        break;
-                    }
-                }
-            }
-            catch (TaskCanceledException)
-            {
-                Logger.Info($"Channel {channelNo} ({DeviceName}): Hardware monitoring cancelled.");
-            }
-            finally
-            {
-                OnOperationCompleted(channelNo);
-            }
-            Logger.Info($"Channel {channelNo} ({DeviceName}): Hardware monitoring stopped.");
-        }
 
         public override void OnOperationCompleted(int channelNo)
         {
@@ -171,6 +105,23 @@ namespace TCP.Command.PCIE
         public override void StopOperation()
         {
             throw new NotImplementedException();
+        }
+
+        public byte[] ReadBigFile(string filePath, int readByteLength)
+        {
+            FileStream stream = new FileStream(filePath, FileMode.Open);
+            byte[] buffer = new byte[readByteLength];
+            stream.Read(buffer, 0, readByteLength);
+            stream.Close();
+            stream.Dispose();
+            return buffer;
+            //string str = Encoding.Default.GetString(buffer) //如果需要转换成编码字符串的话
+        }
+
+
+        public override void CaculateFIR()
+        {
+            
         }
     }
 }

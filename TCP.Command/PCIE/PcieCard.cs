@@ -28,19 +28,21 @@ namespace TCP.Command.PCIE
         private byte[] FFTCBBuf;// = new byte[PackLenB * PackNum];
         private uint[] FFTPackCnt;//单位时间内包个数计数值
         private uint[] DDCPackCnt;//单位时间内包个数计数值
+        public int[] RepKeepRun;
         private int PackLenB = 128 * 1000;
         private int PackNum = 50;
 
         private Mutex mutex_cb;
+        public uint SampleRate_WB;
 
-
-
+        public int SampleRate_NB { get; private set; }
+        public int FS { get; set; }
         public int NumberOfCards { get; private set; }
         public  UInt32 AdcBaseAddr { get; private set; }
 
         public int CoupleType { get;set; }
         public ChannelState[] ChannelStates { get; private set; }
-        public int ChannelNumber { get; protected set; }
+        public int ChannelCount { get; protected set; }
         /// <summary>
         /// 设备名字
         /// </summary>
@@ -64,7 +66,8 @@ namespace TCP.Command.PCIE
         public uint ADCClkMode { get; set; }
         public int EnDACWork { get; internal set; }
         public bool EnALG { get; internal set; }
-        public int ReqSrate { get; private set; }
+        public ulong ReqSrate { get; set; }
+        public uint ExtTrigSrcPort { get; internal set; }
         public int NameRule { get; private set; }
         public int SplitFileSizeMB { get; private set; }
         public bool EnDUC { get; internal set; }
@@ -72,32 +75,35 @@ namespace TCP.Command.PCIE
         public uint DdcPulseUnit { get; internal set; }
         public uint DacBaseAddr { get; internal set; }
         public uint DucPulseUnit { get; internal set; }
+        public int TrigSrc { get; set; }
+        public int Trig_edge { get; set; }
         public int[] Len { get; private set; }
+        public string[] FilePath { get; private set; }
         public uint[] NotifySizeB { get; private set; }
-        public int[] RepKeepRun { get; private set; }
         public Mutex Muter_cb { get =>mutex_cb;set=>new Mutex(); }
 
-        dotNetQTDrv.DDCCallBackHandle CallBackAppData
+        public dotNetQTDrv.DDCCallBackHandle CallBackAppData
         {
                get; set;
         }
-        dotNetQTDrv.FFTCallBackHandle CallBackFFTData
+        public dotNetQTDrv.FFTCallBackHandle CallBackFFTData
         {
                get; set;
         }
-        dotNetQTDrv.PUSEREVENT_CALLBACK CallBackUserEvent
+        public dotNetQTDrv.PUSEREVENT_CALLBACK CallBackUserEvent
         {
                   get; set;
         }
+        public int EnChCnt { get; internal set; }
+        public int ChEnMask { get; internal set; }
+        public int DaqMode { get; internal set; }
+        public uint Workmode { get; internal set; }
+        public int Trig_cnt { get; internal set; }
+        public bool isFixLength { get; internal set; }
+        public int Timercount { get; internal set; }
+        public int Oset { get; internal set; }
 
         public abstract int Initialize(uint unCardIdx);
-
-        public virtual async Task ExecuteSingleRunAsync(int channelNo) { }
-
-        public virtual async Task ExecuteLoopRunAsync(int channelNo) { }
-
-        public virtual async Task MonitorHardwareAsync(Func<bool> cancelCondition, int channelNo) { }
-
 
         public abstract void OnOperationCompleted(int channelNo);
 
@@ -106,11 +112,15 @@ namespace TCP.Command.PCIE
 
 
     
-        public PcieCard(uint cardIndex,int channelNumber,int numberofcards)
+        public PcieCard(uint cardIndex,int channelcount,int numberofcards)
         {
             EnALG = true;
             ReqSrate = 250000;
+            SampleRate_WB = 1200000000;
+            SampleRate_NB = 600000000;
+            FS = 0;
             NameRule = 1;
+            RepKeepRun = new int[ChannelCount];
             SplitFileSizeMB = 1024;// = 1024;
             MaxNumFiles = 0xffffffff;
             MaxFileSizeMB = 13312 * 1024;
@@ -121,8 +131,11 @@ namespace TCP.Command.PCIE
             unBoardIndex = 0;
             MARGIN_HIGH_VALUE = 3550;
             unBoardIndex = cardIndex;
-            ChannelNumber = channelNumber;
+            ChannelCount = channelcount;
             NumberOfCards = numberofcards;
+            TrigSrc = 0;
+            Trig_edge = 0;
+            ExtTrigSrcPort = 0;
             LoadConfig();
             InitializeChannelDependentArrays();
             CallBackUserEvent = CallBackFunc_UserEvent_DA;
@@ -135,14 +148,15 @@ namespace TCP.Command.PCIE
         }
         protected void InitializeChannelDependentArrays()
         {
-            ChannelStates = new ChannelState[ChannelNumber];
-            for (int i = 0; i < ChannelNumber; i++)
+            ChannelStates = new ChannelState[ChannelCount];
+            for (int i = 0; i < ChannelCount; i++)
             {
-                ChannelStates[i] = new ChannelState();
+                ChannelStates[i] = new ChannelState(this);
             }
-            Len = new int[ChannelNumber];
-            NotifySizeB = new uint[ChannelNumber];
-            RepKeepRun = new int[ChannelNumber];
+            FilePath = new string[ChannelCount];
+            Len = new int[ChannelCount];
+            NotifySizeB = new uint[ChannelCount];
+            RepKeepRun = new int[ChannelCount];
         }
 
         //protected void InitializeChannelStates()
@@ -250,7 +264,7 @@ namespace TCP.Command.PCIE
             dotNetQTDrv.QTWriteRegister(unBoardIndex, BA, OS, ((SWIEn | AdcNotSyncEn | DdrAfullEn | ChFifoFullEn | RefClkSwEn) << 16));
 
         }
-
+        public abstract void CaculateFIR();
         public void DataPackProcess(int unitId,//接收机编号
         int channelNo,//DDC通道号，调用方法设置的。
         IntPtr Buffer,//数据
@@ -291,8 +305,8 @@ namespace TCP.Command.PCIE
             FFTPackCnt[unitId] += (uint)packnum;
             mutex_cb.ReleaseMutex();
         }
-
-        public  int ld_ChkRT(int value, string log = "")
+        
+        public int ld_ChkRT(int value, string log = "")
         {
             int nRet = -1;
             nRet = value;
@@ -406,5 +420,25 @@ namespace TCP.Command.PCIE
         }
 
         public abstract void StopOperation();
+
+        public void SinglePlay(uint unBoardIndex, byte[] buffer, uint unLen, ref uint bytes_sent, uint unTimeOut, int DmaChIdx)
+        {
+            int bytecount = 0;
+            //dotNetQTDrv.QTGetRegs_i32(unBoardIndex, Regs.PerBufByteCount, ref bytecount, DmaChIdx);
+            bytecount = 0x100000;
+            uint reqLen = unLen;
+            uint offset = 0;
+            uint PerLen = 0;
+            uint SentByte = 0;
+            do
+            {
+                PerLen = (reqLen > (uint)bytecount) ? (uint)bytecount : reqLen;
+                dotNetQTDrv.QTSendData(unBoardIndex, buffer, offset, (uint)PerLen, ref SentByte, 1000, DmaChIdx);
+                offset += SentByte;
+                reqLen -= SentByte;
+            } while (reqLen > 0);
+            bytes_sent = unLen - reqLen;
+        }
+        
     }
 }

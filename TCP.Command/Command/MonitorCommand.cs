@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NLog;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -15,6 +16,7 @@ namespace TCP.Command.Command
         private CancellationTokenSource _cts;
         private Func<bool> _cancelCondition;
         private int _channelNo;
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         public MonitorCommand(PcieCard card, Func<bool> cancelCondition,int channelNo)
         {
@@ -26,7 +28,8 @@ namespace TCP.Command.Command
 
         public async Task ExecuteAsync()
         {
-            await _card.MonitorHardwareAsync(_cancelCondition, _channelNo);
+            await Task.Delay(1000);
+            Logger.Info("Monitor Command Has been Excute");
         }
 
         public void Cancel()
