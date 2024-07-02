@@ -2,6 +2,7 @@
 using NLog.Targets;
 using NLog;
 using TCP.Command.PCIE;
+using TCP.Command.Command;
 
 namespace TCP.Command
 {
@@ -22,14 +23,15 @@ namespace TCP.Command
                 "Press Enter to exit.");
             Console.ReadLine();
             tCPServer.Stop();
-            foreach (var card in list)
-            {
-                for (var i = 0; i < card.ChannelCount; i++) 
-                {
-                    card.ChannelStates[i].loopRunCts.Cancel();
-                    card.ChannelStates[i].singleRunCts.Cancel();
-                }
-            }
+            //foreach (var card in list)
+            //{
+            //    for (var i = 0; i < card.ChannelCount; i++) 
+            //    {
+            //        card.ChannelStates[i].loopRunCts.Cancel();
+            //        card.ChannelStates[i].singleRunCts.Cancel();
+            //    }
+            //}
+            CommandManager.Instance.CancelAllCommands();
         }
         private static void ConfigureNLog()
         {

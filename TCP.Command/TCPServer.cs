@@ -22,7 +22,7 @@ namespace TCP.Command
         private bool isRunning;
         private static TcpClient? currentClient;
         private readonly object lockObject = new object();
-        private CommandManager commandQueueManager = new CommandManager();
+        private CommandManager commandQueueManager = CommandManager.Instance;
         private Task[]? backgroundTasks;
         private CancellationTokenSource cts = new CancellationTokenSource();
 
