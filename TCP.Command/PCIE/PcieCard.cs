@@ -117,7 +117,7 @@ namespace TCP.Command.PCIE
             EnALG = true;
             ReqSrate = 250000;
             SampleRate_WB = 1200000000;
-            SampleRate_NB = 600000000;
+            SampleRate_NB = 1200000000;
             FS = 0;
             NameRule = 1;
             RepKeepRun = new int[ChannelCount];

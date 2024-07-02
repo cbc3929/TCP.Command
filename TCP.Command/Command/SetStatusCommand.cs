@@ -67,7 +67,7 @@ namespace TCP.Command
                 channelstate.RFSwitch = isOn;
                 decimal RF_Atten = 0 > 30 ? 30.0m : channelstate.Power;
                 decimal IF_Atten = (0 > 30) ? (0 - 30.0m) : 0.0m;
-                ConfigRFModule(_card.unBoardIndex, 0, 1, (UInt32)CMD_TYPE.ON_OFF, (decimal)(channelstate.FreqValue / 1000),
+                ConfigRFModule(_card.unBoardIndex, 0, (uint)_absChannelNum - 1, (UInt32)CMD_TYPE.ON_OFF, (decimal)(channelstate.FreqValue / 1000),
                     RF_Atten, IF_Atten, (UInt32)(channelstate.RFSwitch ? 0 : 1));
                 await TCPServer.SendMsgAsync("RF", _absChannelNum, (isOn ? "On" : "Off"));
             }

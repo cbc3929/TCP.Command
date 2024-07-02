@@ -37,7 +37,7 @@ namespace TCP.Command.PCIE
             ld_ChkRT(dotNetQTDrv.QTGetRegs_i32(unCardIdx, Regs.product_number, ref temp_number), "读取产品编码");
             ProductNumber = temp_number;
             
-            SampleRate = 512000000;
+            SampleRate = 1200000000;
             uint refdiv = 10;
             RefClkMode = Comm.QTFM_COMMON_CLOCK_REF_MODE_1;
             Fref = 10000000;

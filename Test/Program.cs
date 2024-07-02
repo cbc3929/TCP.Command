@@ -8,23 +8,15 @@ namespace Test
     {
         static void Main()
         {
-            double radio = 23.0001; // 例子值，可以替换为需要的值
-            var (large, small, precision, compromised, originalLarge, originalSmall, originalRatio, originalPrecision) = FindClosestFractionSS(radio);
+            double radio = 1.34452323; // 例子值，可以替换为需要的值
+            var (large, small) = FindClosestFractionlast(radio);
             double actualRatio = (double)large / small;
 
             Console.WriteLine($"Large: {large}");
             Console.WriteLine($"Small: {small}");
             Console.WriteLine($"Actual Ratio: {actualRatio}");
             Console.WriteLine($"Desired Ratio: {radio}");
-            Console.WriteLine($"Precision Achieved: {precision} decimal places");
-            if (compromised)
-            {
-                Console.WriteLine("Precision was compromised to achieve a larger value.");
-                Console.WriteLine($"Original Large: {originalLarge}");
-                Console.WriteLine($"Original Small: {originalSmall}");
-                Console.WriteLine($"Original Ratio: {originalRatio}");
-                Console.WriteLine($"Original Precision: {originalPrecision} decimal places");
-            }
+            
         }
 
         static bool IsSignificantDifference(SortedList<double, (int, int)> ratioList, double ratio, double threshold)
@@ -191,6 +183,52 @@ namespace Test
             }
 
             return (bestLarge, bestSmall, finalPrecision, precisionCompromised, originalLarge, originalSmall, originalRatio, originalPrecision);
+        }
+
+        public static (int, int) FindClosestFractionlast(double radio)
+        {
+            int maxLarge = 16384;
+            int bestLarge = 0;
+            int bestSmall = 0;
+            double closestDifference = double.MaxValue;
+            int originalLarge = 0;
+            int originalSmall = 0;
+            double originalRatio = 0.0;
+            int originalPrecision = 0;
+            bool precisionCompromised = false;
+
+            // 如果radio是整数，直接计算最大精度情况
+            if (radio == (int)radio)
+            {
+                bestLarge = (int)radio;
+                bestSmall = 1;
+                return (bestLarge, bestSmall);
+            }
+
+            for (int small = 1; small <= maxLarge; small++)
+            {
+                int large = (int)Math.Round(radio * small);
+                if (large > 0 && large <= maxLarge)
+                {
+                    double actualRatio = (double)large / small;
+                    double difference = Math.Abs(actualRatio - radio);
+
+                    if (difference < closestDifference)
+                    {
+                        closestDifference = difference;
+                        bestLarge = large;
+                        bestSmall = small;
+                        originalPrecision = (int)Math.Floor(-Math.Log10(difference));
+
+                        if (originalPrecision >= 10)
+                        {
+                            return (bestLarge, bestSmall);
+                        }
+                    }
+                }
+            }
+
+            return (bestLarge, bestSmall);
         }
 
     }

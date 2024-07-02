@@ -9,6 +9,11 @@ using System.Collections.Generic;
 namespace TCP.Command.Interface
 {
 
+    public static class EventTypes
+    {
+        public const string SrateChanged = "SrateChanged";
+    }
+
 
     public class EventBus
     {

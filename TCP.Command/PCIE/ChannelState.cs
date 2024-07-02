@@ -1,9 +1,11 @@
-﻿using NLog;
+﻿using Lookdata;
+using NLog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using TCP.Command.Interface;
 
 namespace TCP.Command.PCIE
 {
@@ -13,17 +15,18 @@ namespace TCP.Command.PCIE
         public CancellationTokenSource loopRunCts;
         public CancellationTokenSource monitorCts;
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+        private long _srate;
+
         public long Srate
         {
-            get { return Srate; }
+            get { return _srate; }
             set
             {
-                if (Srate != value)
+                if (_srate != value)
                 {
-                    Srate = value;
+                    _srate = value;
                     onSrateChange();
                 }
-
             }
         }
         public bool IsLoop { get; set; }
@@ -67,6 +70,7 @@ namespace TCP.Command.PCIE
 
         public ChannelState(PcieCard card)
         {
+            _card = card;
             Srate = 0;
             ARBSwitch = false;
             BBSwitch = false;
@@ -99,26 +103,31 @@ namespace TCP.Command.PCIE
                     CurrentFIR = 4;
                     var cic = (int)FindNearestPowerOfTwo(_card.FS / Srate);
                     CalculateFarrowValues(_card.FS, Srate, cic);
+                    CICNum = cic;
                 }
                 else if (Srate > 9375000 && Srate <= 18750000)
                 {
                     CurrentFIR = 32;
                     CalculateFarrowValues(_card.FS, Srate, CurrentFIR);
+                    CICNum = CurrentFIR;
                 }
                 else if (Srate > 18750000 && Srate <= 37500000)
                 {
                     CurrentFIR = 16;
                     CalculateFarrowValues(_card.FS, Srate, CurrentFIR);
+                    CICNum = CurrentFIR;
                 }
                 else if (Srate > 37500000 && Srate <= 75000000)
                 {
                     CurrentFIR = 8;
                     CalculateFarrowValues(_card.FS, Srate, CurrentFIR);
+                    CICNum = CurrentFIR;
                 }
                 else
                 {
                     CurrentFIR = 4;
                     CalculateFarrowValues(_card.FS, Srate, CurrentFIR);
+                    CICNum = CurrentFIR;
                 }
             }
             else
@@ -126,15 +135,8 @@ namespace TCP.Command.PCIE
                 //宽带
 
             }
-
-
-
-
-            var value = Srate * Math.Pow(2, 20) / 1171875;
-            long round = (long)Math.Round(value);
-            long limitedValue = round & 0xFFFFFF;
-            DDS = (uint)limitedValue;
-
+            //通知 eventBus 法罗 dds 和 cnc已经计算结束
+            EventBus.Instance.Publish(EventTypes.SrateChanged, EventArgs.Empty);
         }
 
 
@@ -162,10 +164,7 @@ namespace TCP.Command.PCIE
             return Math.Pow(2, exponent);
         }
         /// <summary>
-        /// 保证比值的情况下，精度最高的且分母最接近16384 的组合
-        /// 损失精度策略：精度不可以损失到低于比值的4位
-        /// 精度最多可以损失两位，且必须保证新的分母比原来的分母大1000
-        /// 触发损失精度策略后会logger出对比
+        /// 保证比值的情况下，精度最高的且分母最接近16384 的组合 精度优先
         /// </summary>
         /// <param name="radio">原始比值</param>
         /// <returns></returns>
@@ -175,11 +174,8 @@ namespace TCP.Command.PCIE
             int bestLarge = 0;
             int bestSmall = 0;
             double closestDifference = double.MaxValue;
-            int originalLarge = 0;
-            int originalSmall = 0;
-            double originalRatio = 0.0;
+
             int originalPrecision = 0;
-            bool precisionCompromised = false;
 
             // 如果radio是整数，直接计算最大精度情况
             if (radio == (int)radio)
@@ -212,52 +208,6 @@ namespace TCP.Command.PCIE
                 }
             }
 
-            originalLarge = bestLarge;
-            originalSmall = bestSmall;
-            originalRatio = (double)bestLarge / bestSmall;
-
-            for (int precision = originalPrecision - 1; precision >= 4; precision--)
-            {
-                for (int small = 1; small <= maxLarge; small++)
-                {
-                    int large = (int)Math.Round(radio * small);
-                    if (large > 0 && large <= maxLarge)
-                    {
-                        double actualRatio = (double)large / small;
-                        double difference = Math.Abs(actualRatio - radio);
-
-                        if (Math.Abs(difference - Math.Pow(10, -precision)) < Math.Pow(10, -precision + 1))
-                        {
-                            if (large > bestLarge && (large - originalLarge) > 1000)
-                            {
-                                bestLarge = large;
-                                bestSmall = small;
-                                precisionCompromised = true;
-
-                                if (precision <= originalPrecision - 2)
-                                {
-                                    Logger.Info($"Precision was compromised to achieve a larger value.");
-                                    Logger.Info($"Original Large: {originalLarge}");
-                                    Logger.Info($"Original Small: {originalSmall}");
-                                    Logger.Info($"Original Ratio: {originalRatio}");
-                                    Logger.Info($"Original Precision: {originalPrecision} decimal places");
-                                    return (bestLarge, bestSmall);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (precisionCompromised)
-            {
-                Logger.Info($"Precision was compromised to achieve a larger value.");
-                Logger.Info($"Original Large: {originalLarge}");
-                Logger.Info($"Original Small: {originalSmall}");
-                Logger.Info($"Original Ratio: {originalRatio}");
-                Logger.Info($"Original Precision: {originalPrecision} decimal places");
-            }
-
             return (bestLarge, bestSmall);
         }
         /// <summary>
@@ -279,7 +229,7 @@ namespace TCP.Command.PCIE
                 double b = large / small;
 
                 var newSrate = fs / (b * factor);
-                var value = newSrate * Math.Pow(2, 20) / 1171875;
+                var value = newSrate * Math.Pow(2, 22) / 1171875;
                 long round = (long)Math.Round(value);
                 long limitedValue = round & 0xFFFFFF;
                 DDS = (uint)limitedValue;
@@ -288,7 +238,7 @@ namespace TCP.Command.PCIE
             {
                 FarrowInterp = (UInt16)(fs / biggest);
                 FarrowDecim = (UInt16)(srate * factor / biggest);
-                var value = Srate * Math.Pow(2, 20) / 1171875;
+                var value = Srate * Math.Pow(2, 22) / 1171875;
                 long round = (long)Math.Round(value);
                 long limitedValue = round & 0xFFFFFF;
                 DDS = (uint)limitedValue;

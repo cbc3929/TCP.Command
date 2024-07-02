@@ -17,10 +17,10 @@ namespace TCP.Command.PCIE
         {
             switch (productNumber)
             {
-                case 68556299:
+                case 0x416160b:
                     Logger.Info("窄带" + productNumber.ToString());
                     return new NBCard(cardIndex,2);
-                case 68556298:
+                case 0x14200:
                     Logger.Info("宽带" + productNumber.ToString());
                     return new WBCard(cardIndex,2);
                 default:
@@ -38,23 +38,21 @@ namespace TCP.Command.PCIE
             //return deviceStatusManger.deviceList;
 
             //dBm_offset[1, 0] = 0;
-#if DEBUG
-            int product_nb_number = 0x416160B;
-            int product_wb_number = 68556298;
-            PcieCard wb_card = CreatePcieCard(0, product_wb_number);
-            PcieCard nb_card = CreatePcieCard(1, product_nb_number);
-            wb_card.Initialize(0);
-            nb_card.Initialize(1);
-            pcieCards.Add(wb_card);
-            pcieCards.Add(nb_card);
-            CardParam.Add(1, wb_card);
-            CardParam.Add(2, nb_card);
-            CardParam.Add(3, nb_card);
-            CardParam.Add(4, nb_card);
-            CardParam.Add(5, nb_card);
+            //int product_nb_number = 0x416160B;
+            //int product_wb_number = 68556298;
+            //PcieCard wb_card = CreatePcieCard(0, product_wb_number);
+            //PcieCard nb_card = CreatePcieCard(1, product_nb_number);
+            //wb_card.Initialize(0);
+            //nb_card.Initialize(1);
+            //pcieCards.Add(wb_card);
+            //pcieCards.Add(nb_card);
+            //CardParam.Add(1, wb_card);
+            //CardParam.Add(2, nb_card);
+            //CardParam.Add(3, nb_card);
+            //CardParam.Add(4, nb_card);
+            //CardParam.Add(5, nb_card);
 
 
-#else
             for (uint i = 0; i < 2; i++)
             {
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableReplay, 0);
@@ -155,7 +153,6 @@ namespace TCP.Command.PCIE
 
             }
 
-#endif
             return pcieCards;
 
         }
