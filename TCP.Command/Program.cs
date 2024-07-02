@@ -22,6 +22,14 @@ namespace TCP.Command
                 "Press Enter to exit.");
             Console.ReadLine();
             tCPServer.Stop();
+            foreach (var card in list)
+            {
+                for (var i = 0; i < card.ChannelCount; i++) 
+                {
+                    card.ChannelStates[i].loopRunCts.Cancel();
+                    card.ChannelStates[i].singleRunCts.Cancel();
+                }
+            }
         }
         private static void ConfigureNLog()
         {
