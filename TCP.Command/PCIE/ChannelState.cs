@@ -16,7 +16,10 @@ namespace TCP.Command.PCIE
         public CancellationTokenSource monitorCts;
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         private long _srate;
+        public bool IsFirstRun { get; set; }
 
+        public string TicTime { get; set; }
+        public bool IsRunning { get; set; }
         public long Srate
         {
             get { return _srate; }
@@ -67,10 +70,12 @@ namespace TCP.Command.PCIE
         public PlaybackMethodType PlaybackMethod { get; set; }
 
         public int Magnitude { get; set; }
+        public Mutex mutex { get; internal set; }
 
         public ChannelState(PcieCard card)
         {
             _card = card;
+            mutex = new Mutex();
             Srate = 0;
             ARBSwitch = false;
             BBSwitch = false;
@@ -79,10 +84,12 @@ namespace TCP.Command.PCIE
             Power = 0;
             FreqSubUnit = Char.Parse("k");
             SampSubUnit = Char.Parse("d");
-            PlaybackMethod = PlaybackMethodType.SIN;
+            PlaybackMethod = PlaybackMethodType.REP;
             IsLoop = false;
             Magnitude = 500;
             DDS = 0;
+            IsRunning = false;
+            IsFirstRun = true;
             FarrowDecim = 0; FarrowInterp = 0; CICNum = 0;
             singleRunCts = new CancellationTokenSource();
             loopRunCts = new CancellationTokenSource();
@@ -133,6 +140,28 @@ namespace TCP.Command.PCIE
             else
             {
                 //宽带
+               
+                if (Srate > 25000000 && Srate <= 75000000)
+                {
+                    CurrentFIR = 16;
+
+                }
+                else if (Srate > 75000000 && Srate <= 150000000)
+                {
+                    CurrentFIR = 8;
+
+                }
+                else if (Srate > 150000000 && Srate <= 300000000)
+                {
+                    CurrentFIR = 4;
+                }
+                else 
+                {
+                    CurrentFIR =2;
+
+                }
+                CalculateFarrowValues(_card.FS, Srate, CurrentFIR);
+                CICNum = CurrentFIR;
 
             }
             //通知 eventBus 法罗 dds 和 cnc已经计算结束
@@ -216,32 +245,54 @@ namespace TCP.Command.PCIE
         /// <param name="fs">卡的采样率 宽带位1.2 窄带为600m</param>
         /// <param name="srate">下发的文件采样率</param>
         /// <param name="factor">一般是fir 如果 是窄带的第一个区间则为cic和fir的混合</param>
-        private void CalculateFarrowValues(int fs, long srate, int factor)
+        private void CalculateFarrowValues(uint fs, long srate, int factor)
         {
             //最大公约数
             var biggest = interept(fs, srate * factor);
+            double temp_farrow_interp = fs/biggest;
+            double temp_farrow_decim = srate * factor / biggest;
             if (fs / biggest > 16384)
             {
-                var (large, small) = FindClosestFraction(fs / biggest);
+                double radtio = temp_farrow_interp / temp_farrow_decim;
+                var (large, small) = FindClosestFraction(radtio);
                 FarrowInterp = (UInt16)large;
                 FarrowDecim = (UInt16)small;
+                double b = (double)large / (double)small;
+                //  srate  
+                var newSrate = fs / factor / b;
+                Logger.Info("触发16384 限制，还原采样率为" + (double)(newSrate/1000) + "kHz");
+                Logger.Info("原始采样率为" + (double)(srate/1000) + "kHz");
                 //还原下发的采样率
-                double b = large / small;
-
-                var newSrate = fs / (b * factor);
-                var value = newSrate * Math.Pow(2, 22) / 1171875;
-                long round = (long)Math.Round(value);
-                long limitedValue = round & 0xFFFFFF;
-                DDS = (uint)limitedValue;
+                
+                double value = 0;
+                if (fs > 600000000)
+                {
+                    value = newSrate * Math.Pow(2, 20) / 1171875;
+                }
+                else 
+                {
+                    value = newSrate * Math.Pow(2, 22) / 1171875;
+                }
+                
+                
+                
+                DDS = (uint)value;
             }
             else
             {
                 FarrowInterp = (UInt16)(fs / biggest);
                 FarrowDecim = (UInt16)(srate * factor / biggest);
-                var value = Srate * Math.Pow(2, 22) / 1171875;
-                long round = (long)Math.Round(value);
-                long limitedValue = round & 0xFFFFFF;
-                DDS = (uint)limitedValue;
+                double value = 0;
+                if (fs > 600000000)
+                {
+                    value = Srate * Math.Pow(2, 20) / 1171875;
+                }
+                else
+                {
+                    value = Srate * Math.Pow(2, 22) / 1171875;
+                }
+
+                DDS = (uint)value;
             }
         }
     }

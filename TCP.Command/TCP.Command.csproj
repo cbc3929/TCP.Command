@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <Reference Include="dotNetQTDrvImport">
-      <HintPath>bin\Debug\net8.0\dotNetQTDrvImport.dll</HintPath>
+      <HintPath>..\..\FMC_SDR_3G_DA\bin\Debug\x64\dotNetQTDrvImport.dll</HintPath>
     </Reference>
   </ItemGroup>
 
@@ -32,9 +32,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="DLL\QT_Pcix.dll">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="ratios.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

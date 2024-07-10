@@ -11,16 +11,12 @@ namespace TCP.Command.PCIE
 {
     public class NBCard : PcieCard
     {
-        const int Min_FIR_001 = 4;
-        const int Min_FIR_9_375 = 32;
-        const int Min_FIR_18_75 = 16;
-        const int Min_FIR_37_75 = 8;
-        const int Min_FIR_75 = 4;
-        private int currentFIR = 0;
+
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
         public NBCard(uint cardIndex,int numberofcards) : base(cardIndex,4, numberofcards)
         {
             FS = 600000000;
+            SampleRate = 1200000000;
         }
 
         public override int Initialize(uint unCardIdx)
@@ -37,7 +33,7 @@ namespace TCP.Command.PCIE
             ld_ChkRT(dotNetQTDrv.QTGetRegs_i32(unCardIdx, Regs.product_number, ref temp_number), "读取产品编码");
             ProductNumber = temp_number;
             
-            SampleRate = 1200000000;
+            
             uint refdiv = 10;
             RefClkMode = Comm.QTFM_COMMON_CLOCK_REF_MODE_1;
             Fref = 10000000;
@@ -100,28 +96,6 @@ namespace TCP.Command.PCIE
             ChannelStates[channelNo].singleRunCts?.Cancel();
             ChannelStates[channelNo].loopRunCts?.Cancel();
             ChannelStates[channelNo].monitorCts?.Cancel();
-        }
-
-        public override void StopOperation()
-        {
-            throw new NotImplementedException();
-        }
-
-        public byte[] ReadBigFile(string filePath, int readByteLength)
-        {
-            FileStream stream = new FileStream(filePath, FileMode.Open);
-            byte[] buffer = new byte[readByteLength];
-            stream.Read(buffer, 0, readByteLength);
-            stream.Close();
-            stream.Dispose();
-            return buffer;
-            //string str = Encoding.Default.GetString(buffer) //如果需要转换成编码字符串的话
-        }
-
-
-        public override void CaculateFIR()
-        {
-            
         }
     }
 }

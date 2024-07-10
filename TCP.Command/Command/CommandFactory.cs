@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Lookdata;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -26,20 +27,7 @@ namespace TCP.Command
             {
                 return new QueryStatusCommand(commandText, chanNum, card);
             }
-            else if (commandText.Contains(":BB:MODE"))
-            {
-                var value = ParseCommandForValue(commandText);
-                if (value.Contains("On") || value.Contains("true") || value.Contains("1"))
-                {
-                    card.RepKeepRun[chanNum] = 1;
-                    return new LoopRunCommand(abschanNum);
-                }
-                else 
-                {
-                    card.RepKeepRun[chanNum] = 0;
-                    return new BlankCommand();
-                }
-            }
+            
             else if (commandText.Contains("ARB:SETTing:LOAD")) 
             {
                 return new SetFileCommand(abschanNum,commandText);

@@ -8,7 +8,7 @@ namespace Test
     {
         static void Main()
         {
-            double radio = 1.34452323; // 例子值，可以替换为需要的值
+            double radio = 1.499385025213966227; // 例子值，可以替换为需要的值
             var (large, small) = FindClosestFractionlast(radio);
             double actualRatio = (double)large / small;
 
@@ -191,11 +191,7 @@ namespace Test
             int bestLarge = 0;
             int bestSmall = 0;
             double closestDifference = double.MaxValue;
-            int originalLarge = 0;
-            int originalSmall = 0;
-            double originalRatio = 0.0;
             int originalPrecision = 0;
-            bool precisionCompromised = false;
 
             // 如果radio是整数，直接计算最大精度情况
             if (radio == (int)radio)

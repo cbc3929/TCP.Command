@@ -11,7 +11,7 @@ namespace TCP.Command.PCIE
     public static class PCIeCardFactory
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
-        public static List<PcieCard> pcieCards = new List<PcieCard>();
+        public static List<PcieCard> pcieCardList = new List<PcieCard>();
         public static Dictionary<int,PcieCard> CardParam = new Dictionary<int,PcieCard>();
         public static PcieCard CreatePcieCard(uint cardIndex, int productNumber)
         {
@@ -30,30 +30,9 @@ namespace TCP.Command.PCIE
         }
         public static List<PcieCard> GetDeviceList()
         {
-            //var deviceStatusManger = NBDeviceStatsManager.Instance;
-            //deviceStatusManger.deviceList.Add("VitrulPcieCard0");
-            //deviceStatusManger.deviceList.Add("VitrulPcieCard1");
-            //IntializerAll();
-
-            //return deviceStatusManger.deviceList;
-
-            //dBm_offset[1, 0] = 0;
-            //int product_nb_number = 0x416160B;
-            //int product_wb_number = 68556298;
-            //PcieCard wb_card = CreatePcieCard(0, product_wb_number);
-            //PcieCard nb_card = CreatePcieCard(1, product_nb_number);
-            //wb_card.Initialize(0);
-            //nb_card.Initialize(1);
-            //pcieCards.Add(wb_card);
-            //pcieCards.Add(nb_card);
-            //CardParam.Add(1, wb_card);
-            //CardParam.Add(2, nb_card);
-            //CardParam.Add(3, nb_card);
-            //CardParam.Add(4, nb_card);
-            //CardParam.Add(5, nb_card);
 
 
-            for (uint i = 0; i < 2; i++)
+            for (uint i = 1; i < 2; i++)
             {
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableReplay, 0);
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableStreaming, 1);
@@ -104,7 +83,7 @@ namespace TCP.Command.PCIE
                     }
                     else
                     {
-                        pcieCards.Add(card);
+                        pcieCardList.Add(card);
                         if (temp_number == 0x416160B) 
                         {
                             CardParam.Add(2, card);
@@ -146,14 +125,51 @@ namespace TCP.Command.PCIE
                 }
             }
 
-            if (pcieCards.Count == 0)
+            if (pcieCardList.Count == 0)
             {
                 Logger.Error("未发现设备，请确认设备和驱动程序已正确安装", "错误");
                 Logger.Error("未发现设备，请确认设备和驱动程序已正确安装");
 
             }
 
-            return pcieCards;
+            return pcieCardList;
+
+        }
+
+        public static void StopAllPlayFile()
+        {
+            for (uint unBoardIndex = 0; unBoardIndex < pcieCardList.Count; unBoardIndex++)
+            {
+                for (int i = 0; i < pcieCardList[(int)unBoardIndex].ChannelCount; i++)
+                {
+                    pcieCardList[(int)unBoardIndex].ChannelStates[i].IsRunning = false;
+                    Logger.Info("Closing " + pcieCardList[(int)unBoardIndex].DeviceName + "'s No." + i + " Channel");
+                    int RepKeepRun = -99;
+                    int DmaChIndex = i;
+                    do
+                    {
+                        System.Threading.Thread.Sleep(100);
+                        dotNetQTDrv.QTGetRegs_i32(unBoardIndex, Regs.RepKeepRun, ref RepKeepRun, DmaChIndex);//2023年3月9日23:32:23：增加DmaChIndex变量，获得当前DMA通道的变量值
+                    } while (RepKeepRun != 0);
+                }
+                dotNetQTDrv.LDSetParam(unBoardIndex, Comm.CMD_MB_ENABLE_REPLAY_MODE, 1, 0, 0, 0xFFFFFFFF);// 选择DAC寄存器
+                //dotNetQTDrv.LDReplayStop(_card.unBoardIndex, _channelNum);//固定DMA CH1回放
+                dotNetQTDrv.QTWriteRegister(unBoardIndex, 0x800E0000, (uint)1 * 4, 0x13);//‘1’：复位
+                dotNetQTDrv.QTWriteRegister(unBoardIndex, 0x800E0000, (uint)0 * 4, 0); // 控制四路窄带Add
+                //----Stop acquisition and close card handle
+                try
+                {
+                    dotNetQTDrv.QTStart(unBoardIndex, Comm.QTFM_COMMON_TRANSMIT_DIRECTION_BRD2PC, 0, 2000);
+                }
+                catch (Exception err)
+                {
+                    Logger.Error(err);
+                }
+                dotNetQTDrv.QTResetBoard(unBoardIndex);//关闭回放端口输出
+                dotNetQTDrv.rtp1clsWriteALGSingleRegister(unBoardIndex, 1, 0);
+                dotNetQTDrv.QTCloseBoard(unBoardIndex);
+
+            }
 
         }
         //绝对顺序

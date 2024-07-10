@@ -12,11 +12,21 @@ namespace TCP.Command.Command
 {
     public class CommandManager
     {
+
+        private static readonly Lazy<CommandManager> instance = new Lazy<CommandManager>(() => new CommandManager());
+        public static CommandManager Instance => instance.Value;
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
         private ConcurrentQueue<ICommand> commandQueue = new ConcurrentQueue<ICommand>();
 
         private ConcurrentStack<ICommand> commandHistory = new ConcurrentStack<ICommand>();
+
+
+        private CommandManager() { }
+
+        private List<Task> runningTasks = new List<Task>();
+
+        private readonly object lockObject = new object();
 
         public void EnquueCommand(ICommand command)
         {
@@ -30,20 +40,44 @@ namespace TCP.Command.Command
                 {
                     try
                     {
-                        await command.ExecuteAsync();
+                        var task = command.ExecuteAsync();
+                        lock (lockObject)
+                        {
+                            runningTasks.Add(task);
+                        }
+                        await task;
+                        lock (lockObject)
+                        {
+                            runningTasks.Remove(task);
+                        }
                         commandHistory.Push(command);
                     }
                     catch (Exception ex)
                     {
+                        Logger.Error(ex);
                         while (!commandHistory.IsEmpty)
                         {
-                           commandHistory.TryPop(out ICommand cmd);
-                           cmd.Cancel();
+                            commandHistory.TryPop(out ICommand cmd);
+                            cmd.Cancel();
                         }
                         throw;
 
                     }
                 }
+            }
+        }
+
+
+        public void CancelAllCommands()
+        {
+            foreach (var command in commandQueue)
+            {
+                command.Cancel();
+            }
+
+            lock (lockObject)
+            {
+                Task.WhenAll(runningTasks).Wait();
             }
         }
     }

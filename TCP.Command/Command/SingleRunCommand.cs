@@ -16,18 +16,21 @@ namespace TCP.Command.Command
         private int _absChannelNo;
         private PcieCard _card;
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+        private CancellationTokenSource _cts;
 
         public SingleRunCommand(int channelNo)
         {
             _absChannelNo = channelNo;
             _channelNo = PCIeCardFactory.ConvertChannelNumber(channelNo);
             _card = PCIeCardFactory.CardParam[channelNo];
+            _cts = _card.ChannelStates[_channelNo].singleRunCts;
         }
 
         public async Task ExecuteAsync()
         {
-
+            Cancel();
             Int64 TotalSent = 0;
+            await Task.Delay(1000);
             bool EnTrig = false;
             long FileSizeB = 0;
             uint SentByte = 0;
@@ -68,6 +71,8 @@ namespace TCP.Command.Command
 
         public void Cancel()
         {
+            _cts.Cancel();
+            Logger.Info("singlePlayer has be cancel. ChannelNum is " + _absChannelNo);
             //
             //.Cancel();
         }

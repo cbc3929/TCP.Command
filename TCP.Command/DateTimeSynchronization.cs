@@ -60,6 +60,7 @@ namespace TCP.Command
         public DateTime ConvertTimeStampToDateTime(long timeStamp)
         {
             DateTime startTime = TimeZone.CurrentTimeZone.ToLocalTime(new System.DateTime(1970, 1, 1)); // 当地时区
+                                                                                                        // 当地时区
                                                                                                         //DateTime dt = startTime.AddMilliseconds(timeStamp);  
             DateTime dt = startTime.AddSeconds(timeStamp + 8 * 3600);//+8时区
             return dt;

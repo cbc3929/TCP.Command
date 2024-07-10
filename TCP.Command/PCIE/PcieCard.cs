@@ -15,7 +15,6 @@ namespace TCP.Command.PCIE
     public abstract class PcieCard
     {
         private static readonly object _lock = new object();
-        private int reqSrate;
         private UInt32 MARGIN_HIGH_VALUE;
         public UInt32[] AdcUsrReg = new UInt32[32];
         public UInt32[] DacUsrReg = new UInt32[32];
@@ -36,12 +35,14 @@ namespace TCP.Command.PCIE
         public uint SampleRate_WB;
 
         public int SampleRate_NB { get; private set; }
-        public int FS { get; set; }
+        public uint FS { get; set; }
         public int NumberOfCards { get; private set; }
         public  UInt32 AdcBaseAddr { get; private set; }
 
         public int CoupleType { get;set; }
         public ChannelState[] ChannelStates { get; private set; }
+
+        
         public int ChannelCount { get; protected set; }
         /// <summary>
         /// 设备名字
@@ -69,7 +70,7 @@ namespace TCP.Command.PCIE
         public ulong ReqSrate { get; set; }
         public uint ExtTrigSrcPort { get; internal set; }
         public int NameRule { get; private set; }
-        public int SplitFileSizeMB { get; private set; }
+        public int SplitFileSizeMB { get;  set; }
         public bool EnDUC { get; internal set; }
         public bool EnSim { get; internal set; }
         public uint DdcPulseUnit { get; internal set; }
@@ -135,6 +136,7 @@ namespace TCP.Command.PCIE
             NumberOfCards = numberofcards;
             TrigSrc = 0;
             Trig_edge = 0;
+            mutex_cb = new Mutex();
             ExtTrigSrcPort = 0;
             LoadConfig();
             InitializeChannelDependentArrays();
@@ -264,7 +266,6 @@ namespace TCP.Command.PCIE
             dotNetQTDrv.QTWriteRegister(unBoardIndex, BA, OS, ((SWIEn | AdcNotSyncEn | DdrAfullEn | ChFifoFullEn | RefClkSwEn) << 16));
 
         }
-        public abstract void CaculateFIR();
         public void DataPackProcess(int unitId,//接收机编号
         int channelNo,//DDC通道号，调用方法设置的。
         IntPtr Buffer,//数据
@@ -418,27 +419,5 @@ namespace TCP.Command.PCIE
                 }
             }
         }
-
-        public abstract void StopOperation();
-
-        public void SinglePlay(uint unBoardIndex, byte[] buffer, uint unLen, ref uint bytes_sent, uint unTimeOut, int DmaChIdx)
-        {
-            int bytecount = 0;
-            //dotNetQTDrv.QTGetRegs_i32(unBoardIndex, Regs.PerBufByteCount, ref bytecount, DmaChIdx);
-            bytecount = 0x100000;
-            uint reqLen = unLen;
-            uint offset = 0;
-            uint PerLen = 0;
-            uint SentByte = 0;
-            do
-            {
-                PerLen = (reqLen > (uint)bytecount) ? (uint)bytecount : reqLen;
-                dotNetQTDrv.QTSendData(unBoardIndex, buffer, offset, (uint)PerLen, ref SentByte, 1000, DmaChIdx);
-                offset += SentByte;
-                reqLen -= SentByte;
-            } while (reqLen > 0);
-            bytes_sent = unLen - reqLen;
-        }
-        
     }
 }

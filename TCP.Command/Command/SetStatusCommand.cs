@@ -55,21 +55,33 @@ namespace TCP.Command
             string valueUnitPart = ParseCommandForValue(_commandText);
             var channelstate = _card.ChannelStates[_channelNumber];
             // 根据命令设置相应的状态
-            
+
             if (_commandText.Contains("RF:SWITCH"))
             {
                 bool isOn = valueUnitPart.Contains("On") || valueUnitPart.Contains("1") || valueUnitPart.Contains("true");
-                if (isOn)
-                {
-                    //TODO 打开射频开关逻辑
-                }
+                //判断是宽带还是窄带
+                var channelNum = _absChannelNum > 1 ? 0 : _absChannelNum - 2;
                 //先控制状态，再去检查
                 channelstate.RFSwitch = isOn;
-                decimal RF_Atten = 0 > 30 ? 30.0m : channelstate.Power;
-                decimal IF_Atten = (0 > 30) ? (0 - 30.0m) : 0.0m;
-                ConfigRFModule(_card.unBoardIndex, 0, (uint)_absChannelNum - 1, (UInt32)CMD_TYPE.ON_OFF, (decimal)(channelstate.FreqValue / 1000),
+                Logger.Error("rf " + isOn);
+                decimal RF_Atten = channelstate.Power > 30 ? 30.0m : channelstate.Power;
+                decimal IF_Atten = (channelstate.Power > 30) ? (channelstate.Power - 30.0m) : 0.0m;
+                ConfigRFModule(_card.unBoardIndex, 0, (uint)channelNum, (UInt32)CMD_TYPE.ON_OFF, (decimal)(channelstate.FreqValue / 1000),
                     RF_Atten, IF_Atten, (UInt32)(channelstate.RFSwitch ? 0 : 1));
                 await TCPServer.SendMsgAsync("RF", _absChannelNum, (isOn ? "On" : "Off"));
+            }
+            else if (_commandText.Contains(":BB:MODE"))
+            {
+                var value = ParseCommandForValue(_commandText);
+                if (value.Contains("On") || value.Contains("true") || value.Contains("1"))
+                {
+                    dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, 1);
+                }
+                else
+                {
+                    dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, 0);
+
+                }
             }
             else if (_commandText.Contains("ARB:SWITCH"))
             {
@@ -79,12 +91,6 @@ namespace TCP.Command
 
                 channelstate.ARBSwitch = isOn;
                 await TCPServer.SendMsgAsync("ARB", _absChannelNum, (isOn ? "On" : "Off"));
-            }
-            //下发文件
-            else if (_commandText.Contains("ARB:SETTing:LOAD"))
-            {
-                await TCPServer.SendMsgAsync("LOAD", _absChannelNum, valueUnitPart);
-
             }
             else if (_commandText.Contains("FREQuency"))
             {
@@ -111,9 +117,9 @@ namespace TCP.Command
                 {
                     channelstate.FreqValue = value * subUnitValue;
                     channelstate.FreqSubUnit = subUnit;
-                    decimal RF_Atten = (0 > 30) ? 30.0m : 0;
-                    decimal IF_Atten = (0 > 30) ? 0 - 30.0m : 0.0m;
-
+                    decimal RF_Atten = (channelstate.Power > 30) ? 30.0m : channelstate.Power;
+                    decimal IF_Atten = (channelstate.Power > 30) ? channelstate.Power - 30.0m : 0.0m;
+                    Logger.Info("freq:" + channelstate.FreqValue);
                     ConfigRFModule(_card.unBoardIndex, 0, (uint)_channelNumber, (UInt32)CMD_TYPE.FREQ, (decimal)channelstate.FreqValue / 1000,
                         RF_Atten, IF_Atten, (UInt32)(channelstate.RFSwitch ? 0 : 1));
                     await TCPServer.SendMsgAsync("FREQUENCY", _absChannelNum, value + subUnit + "Hz");
@@ -129,12 +135,36 @@ namespace TCP.Command
             {
                 int unitStartIndex = valueUnitPart.IndexOf("dBm");
                 string valueStr = valueUnitPart.Substring(0, unitStartIndex);
-                int value = int.Parse(valueStr);
+                var value = double.Parse(valueStr);
                 var state = channelstate;
                 if (state != null)
                 {
-                    state.Power = value;
-                    _card.SetChannelState(_channelNumber, state);
+                    decimal RF_Atten = 0;
+                    decimal IF_Atten = 0;
+                    if (value > 10 || value < -80)
+                    {
+                        Logger.Error("衰减范围超过阈值!");
+                        return;
+                    }
+                    if (value == 0)
+                    {
+                        RF_Atten = 0;
+
+                    }
+                    state.Power = (int)value;
+                    var ss = 10 - value;
+                    if (ss <= 45)
+                    {
+                        RF_Atten = (int)ss;
+                        IF_Atten = 0;
+                    }
+
+                    Logger.Info("power:" + value); ;
+
+                    ConfigRFModule(_card.unBoardIndex, 0, (uint)_channelNumber, (UInt32)CMD_TYPE.RF_ATT, (decimal)channelstate.FreqValue / 1000,
+                        (uint)RF_Atten, (uint)IF_Atten, (UInt32)(channelstate.RFSwitch ? 0 : 1));
+                    ConfigRFModule(_card.unBoardIndex, 0, (uint)_channelNumber, (UInt32)CMD_TYPE.IF_ATT, (decimal)channelstate.FreqValue / 1000,
+                        (uint)RF_Atten, (uint)IF_Atten, (UInt32)(channelstate.RFSwitch ? 0 : 1));
                 }
                 await TCPServer.SendMsgAsync("POWER", _absChannelNum, valueStr);
             }
@@ -145,10 +175,51 @@ namespace TCP.Command
                 switch (subType)
                 {
                     case "SIN":
-                        _card.ChannelStates[_channelNumber].ARBSwitch = false;
+                        _card.ChannelStates[_channelNumber].PlaybackMethod = PlaybackMethodType.SIN;
                         break;
                     case "REP":
-                        _card.ChannelStates[_channelNumber].ARBSwitch = true;
+                        _card.ChannelStates[_channelNumber].PlaybackMethod = PlaybackMethodType.REP;
+                        break;
+                    case "TIC":
+                        _card.ChannelStates[_channelNumber].PlaybackMethod = PlaybackMethodType.TIC;
+                        _card.ChannelStates[_channelNumber].TicTime = valueUnitPart;
+                        // 分割时间字符串
+                        string dateTimeStr = valueUnitPart;
+                        string[] dateTimeParts = dateTimeStr.Split('-');
+
+                        // 提取各部分
+                        uint year = uint.Parse(dateTimeParts[0]) - 2000;
+                        uint month = uint.Parse(dateTimeParts[1]);
+                        uint day = uint.Parse(dateTimeParts[2]);
+                        uint hour = uint.Parse(dateTimeParts[3]);
+                        uint minute = uint.Parse(dateTimeParts[4]);
+                        uint second = uint.Parse(dateTimeParts[5]);
+                        uint us = uint.Parse(dateTimeParts[6]);
+                        uint ms = uint.Parse(dateTimeParts[7]);
+
+                        // 计算一年中的第几天
+                        uint[] daysInMonth = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+                        if ((year + 2000) % 4 == 0 && ((year + 2000) % 100 != 0 || (year + 2000) % 400 == 0))
+                        {
+                            daysInMonth[1] = 29; // 闰年2月有29天
+                        }
+                        uint dayOfYear = day;
+                        for (int i = 0; i < month - 1; i++)
+                        {
+                            dayOfYear += (uint)daysInMonth[i];
+                        }
+
+                        // 计算寄存器19的值
+                        uint timeValue = (year << 26) | (dayOfYear << 17) | (hour << 12) | (minute << 6) | (second & 0x3F);
+
+                        // 将计算出的值写入寄存器19
+                        dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, 0x800e0000, 19 * 4, timeValue);
+
+                        // 计算寄存器20的值
+                        uint timeSubValue = ((us & 0xF) << 4) | (ms & 0xF);
+
+                        // 将计算出的值写入寄存器20
+                        dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, 0x800e0000, 20 * 4, timeSubValue);
                         break;
                 }
             }
@@ -173,9 +244,9 @@ namespace TCP.Command
                     valueStr = valueStr.Substring(0, valueStr.Length - 1);
                     subUnitValue = 1000000000;
                 }
-                if (long.TryParse(valueStr, out long value))
+                if (double.TryParse(valueStr, out double value))
                 {
-                    channelstate.Srate = value * subUnitValue;
+                    channelstate.Srate = (long)(value * subUnitValue);
                     channelstate.SampSubUnit = subUnit;
                     await TCPServer.SendMsgAsync("SRATE", _absChannelNum, value + subUnit + "Hz");
                     //_pBconfig.SetSRateValue((uint)_channelNumber, value * subUnitValue);

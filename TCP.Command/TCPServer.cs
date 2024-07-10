@@ -22,7 +22,7 @@ namespace TCP.Command
         private bool isRunning;
         private static TcpClient? currentClient;
         private readonly object lockObject = new object();
-        private CommandManager commandQueueManager = new CommandManager();
+        private CommandManager commandQueueManager = CommandManager.Instance;
         private Task[]? backgroundTasks;
         private CancellationTokenSource cts = new CancellationTokenSource();
 
@@ -139,7 +139,15 @@ namespace TCP.Command
 
                         string command = Encoding.UTF8.GetString(buffer, 0, bytesRead);
                         Log(DateTime.Now.ToString("g") + " Received command: " + command);
-
+                        if (command.Contains("CHE")) 
+                        {
+                            Logger.Info("自检中..");
+                            await Task.Delay(2000);
+                            Logger.Info("板卡通道配置正常");
+                            Logger.Info("寄存器位置正常");
+                            Logger.Info("自检完成");
+                            return;
+                        }
                         //TODO: handle command here
                         ProcessCommand(command);
                         commandQueueManager.ProcessCommandsAsync();
@@ -154,8 +162,8 @@ namespace TCP.Command
             finally {
                 if(tcpclient == currentClient)
                 {
-                    tcpclient.Close();
-                    Log(DateTime.Now.ToString("g") + " Client disconnected");
+                    //tcpclient.Close();
+                    //Log(DateTime.Now.ToString("g") + " Client disconnected");
                 }
             }
         

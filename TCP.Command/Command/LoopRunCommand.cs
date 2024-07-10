@@ -35,9 +35,10 @@ namespace TCP.Command.Command
             Int64 TotalSent = 0;
             bool EnTrig = false;
             long FileSizeB = 0;
+            await Task.Delay(1000);
             uint SentByte = 0;
             string OffLineFile = _card.FilePath[_channelNo];
-            var token = _card.ChannelStates[_channelNo].singleRunCts;
+            var token = _card.ChannelStates[_channelNo].loopRunCts;
             try
             {
                 FileInfo fileInfo = new FileInfo(OffLineFile);
