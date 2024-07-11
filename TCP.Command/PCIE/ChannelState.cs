@@ -143,21 +143,21 @@ namespace TCP.Command.PCIE
                
                 if (Srate > 25000000 && Srate <= 75000000)
                 {
-                    CurrentFIR = 16;
+                    CurrentFIR = 32;
 
                 }
                 else if (Srate > 75000000 && Srate <= 150000000)
                 {
-                    CurrentFIR = 8;
+                    CurrentFIR = 16;
 
                 }
                 else if (Srate > 150000000 && Srate <= 300000000)
                 {
-                    CurrentFIR = 4;
+                    CurrentFIR = 8;
                 }
                 else 
                 {
-                    CurrentFIR =2;
+                    CurrentFIR =4;
 
                 }
                 CalculateFarrowValues(_card.FS, Srate, CurrentFIR);
@@ -267,7 +267,7 @@ namespace TCP.Command.PCIE
                 double value = 0;
                 if (fs > 600000000)
                 {
-                    value = newSrate * Math.Pow(2, 20) / 1171875;
+                    value = newSrate * Math.Pow(2, 2) / 1171875;
                 }
                 else 
                 {
@@ -285,7 +285,7 @@ namespace TCP.Command.PCIE
                 double value = 0;
                 if (fs > 600000000)
                 {
-                    value = Srate * Math.Pow(2, 20) / 1171875;
+                    value = Srate * Math.Pow(2, 21) / 1171875;
                 }
                 else
                 {
