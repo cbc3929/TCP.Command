@@ -1,0 +1,18 @@
+{
+  "profiles": {
+    "TCP.Command": {
+      "commandName": "Project"
+    },
+    "WSL": {
+      "commandName": "WSL2",
+      "distributionName": ""
+    },
+    "Home": {
+      "commandName": "Executable",
+      "remoteDebugEnabled": true
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
