@@ -68,6 +68,7 @@ namespace TCP.Command.Command
             EnTrig = false;
             long FileSizeB = 0;
             uint SentByte = 0;
+            await Task.Delay(1000);
             string OffLineFile = _card.FilePath[_channelNum];
             _channelState.IsRunning = true;
             await InitChan();
@@ -144,7 +145,7 @@ namespace TCP.Command.Command
             // 开始计时
             stopwatch.Start();
 
-            sentByte = await SinglePlayAsync(unBoardIndex, buffer, (uint)buffer.Length, 1000, channelNum);
+            //sentByte = await SinglePlayAsync(unBoardIndex, buffer, (uint)buffer.Length, 1000, channelNum);
 
             // 停止计时
             stopwatch.Stop();
@@ -452,7 +453,6 @@ namespace TCP.Command.Command
             uint PerLen = 0;
             uint SentByte = 0;
             do
-
             {
                 PerLen = (reqLen > (uint)bytecount) ? (uint)bytecount : reqLen;
                 dotNetQTDrv.QTSendData(unBoardIndex, buffer, offset, (uint)PerLen, ref SentByte, 1000, DmaChIdx);
