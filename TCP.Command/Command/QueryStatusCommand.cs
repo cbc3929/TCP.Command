@@ -14,21 +14,21 @@ namespace TCP.Command
     {
         private readonly string _commandText;
         private readonly int _channelNumber;
-        private readonly int _originNumber;
+        private readonly int _absNumber;
         private PcieCard _card;
 
 
-        public QueryStatusCommand(string commandText, int channelNumber,PcieCard card )
+        public QueryStatusCommand(string commandText, int absNumber,PcieCard card )
         {
             _commandText = commandText;
-            _originNumber = channelNumber==1?0:channelNumber;
-            _channelNumber = channelNumber==1?channelNumber:channelNumber-2;
+            _absNumber =absNumber;
+            _channelNumber = PCIeCardFactory.ConvertChannelNumber(absNumber);
             _card = card;
         }
 
         public async Task ExecuteAsync()
         {
-            ChannelState state = _card.GetChannelState(_channelNumber);
+            var state = _card.ChannelStates[_channelNumber];
             string value = "";
             string commandType = "";
 
@@ -41,8 +41,8 @@ namespace TCP.Command
             }
             else if (_commandText.Contains(":BB:ARB:SRATe"))
             {
-                value = state.Srate.ToString() + state.SampSubUnit + "Hz";
-                commandType = "SRATe";
+                value = state.SrateOrigin.ToString() + state.SampSubUnit + "Hz";
+                commandType = "SRATE";
             }
             else if (_commandText.Contains(":BB:ARB:SWITCH"))
             {
@@ -61,7 +61,7 @@ namespace TCP.Command
             }
             else if (_commandText.Contains(":FREQuency"))
             {
-                value = state.FreqValue.ToString() + state.FreqSubUnit + "Hz";
+                value = state.FreqOrginValue.ToString() + state.FreqSubUnit + "Hz";
                 commandType = "FREQUENCY";
             }
             else if (_commandText.Contains(":POWer"))
@@ -89,7 +89,7 @@ namespace TCP.Command
             {
                 value = "Unknown command";
             }
-            await TCPServer.SendMsgAsync(commandType, _originNumber, value);
+            await TCPServer.SendMsgAsync(commandType, _absNumber, value);
         }
 
 

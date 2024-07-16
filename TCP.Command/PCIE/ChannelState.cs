@@ -32,6 +32,10 @@ namespace TCP.Command.PCIE
                 }
             }
         }
+
+        public double SrateOrigin { get; set; }
+
+        public double FreqOrginValue { get; set; }
         public bool IsLoop { get; set; }
 
         public bool ARBSwitch { get; set; }
@@ -46,6 +50,8 @@ namespace TCP.Command.PCIE
         /// </summary>
         public int CurrentFIR { get; set; }
 
+        public decimal RF_Atten { get; set; }
+        public decimal IF_Atten { get; set; }
         /// <summary>
         /// 插值
         /// </summary>
@@ -88,6 +94,8 @@ namespace TCP.Command.PCIE
             IsLoop = false;
             Magnitude = 500;
             DDS = 0;
+            RF_Atten = 0;
+            IF_Atten = 0;
             IsRunning = false;
             IsFirstRun = true;
             FarrowDecim = 0; FarrowInterp = 0; CICNum = 0;
@@ -143,21 +151,21 @@ namespace TCP.Command.PCIE
                
                 if (Srate > 25000000 && Srate <= 75000000)
                 {
-                    CurrentFIR = 16;
+                    CurrentFIR = 32;
 
                 }
                 else if (Srate > 75000000 && Srate <= 150000000)
                 {
-                    CurrentFIR = 8;
+                    CurrentFIR = 16;
 
                 }
                 else if (Srate > 150000000 && Srate <= 300000000)
                 {
-                    CurrentFIR = 4;
+                    CurrentFIR = 8;
                 }
                 else 
                 {
-                    CurrentFIR =2;
+                    CurrentFIR = 4;
 
                 }
                 CalculateFarrowValues(_card.FS, Srate, CurrentFIR);
@@ -267,7 +275,7 @@ namespace TCP.Command.PCIE
                 double value = 0;
                 if (fs > 600000000)
                 {
-                    value = newSrate * Math.Pow(2, 20) / 1171875;
+                    value = newSrate * Math.Pow(2, 21) / 1171875;
                 }
                 else 
                 {
@@ -285,7 +293,7 @@ namespace TCP.Command.PCIE
                 double value = 0;
                 if (fs > 600000000)
                 {
-                    value = Srate * Math.Pow(2, 20) / 1171875;
+                    value = Srate * Math.Pow(2, 21) / 1171875;
                 }
                 else
                 {

@@ -11,7 +11,7 @@ namespace TCP.Command.PCIE
     {
         public WBCard( uint cardIndex,int numberofcards) : base(cardIndex,1, numberofcards)
         {
-            FS = 1200000000;
+            FS = 2400000000;
             SampleRate_WB = 2800000000;
             SplitFileSizeMB = 10 * 1024;
         }

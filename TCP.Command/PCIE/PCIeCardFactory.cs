@@ -11,8 +11,9 @@ namespace TCP.Command.PCIE
     public static class PCIeCardFactory
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
-        public static List<PcieCard> pcieCardList = new List<PcieCard>();
+        public static List<PcieCard> pcieCards = new List<PcieCard>();
         public static Dictionary<int,PcieCard> CardParam = new Dictionary<int,PcieCard>();
+        public static List<string> NewFilePathList = new List<string>();
         public static PcieCard CreatePcieCard(uint cardIndex, int productNumber)
         {
             switch (productNumber)
@@ -32,7 +33,7 @@ namespace TCP.Command.PCIE
         {
 
 
-            for (uint i = 1; i < 2; i++)
+            for (uint i = 0; i < 2; i++)
             {
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableReplay, 0);
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableStreaming, 1);
@@ -83,7 +84,7 @@ namespace TCP.Command.PCIE
                     }
                     else
                     {
-                        pcieCardList.Add(card);
+                        pcieCards.Add(card);
                         if (temp_number == 0x416160B) 
                         {
                             CardParam.Add(2, card);
@@ -125,57 +126,84 @@ namespace TCP.Command.PCIE
                 }
             }
 
-            if (pcieCardList.Count == 0)
+            if (pcieCards.Count == 0)
             {
                 Logger.Error("未发现设备，请确认设备和驱动程序已正确安装", "错误");
                 Logger.Error("未发现设备，请确认设备和驱动程序已正确安装");
 
             }
 
-            return pcieCardList;
-
-        }
-
-        public static void StopAllPlayFile()
-        {
-            for (uint unBoardIndex = 0; unBoardIndex < pcieCardList.Count; unBoardIndex++)
-            {
-                for (int i = 0; i < pcieCardList[(int)unBoardIndex].ChannelCount; i++)
-                {
-                    pcieCardList[(int)unBoardIndex].ChannelStates[i].IsRunning = false;
-                    Logger.Info("Closing " + pcieCardList[(int)unBoardIndex].DeviceName + "'s No." + i + " Channel");
-                    int RepKeepRun = -99;
-                    int DmaChIndex = i;
-                    do
-                    {
-                        System.Threading.Thread.Sleep(100);
-                        dotNetQTDrv.QTGetRegs_i32(unBoardIndex, Regs.RepKeepRun, ref RepKeepRun, DmaChIndex);//2023年3月9日23:32:23：增加DmaChIndex变量，获得当前DMA通道的变量值
-                    } while (RepKeepRun != 0);
-                }
-                dotNetQTDrv.LDSetParam(unBoardIndex, Comm.CMD_MB_ENABLE_REPLAY_MODE, 1, 0, 0, 0xFFFFFFFF);// 选择DAC寄存器
-                //dotNetQTDrv.LDReplayStop(_card.unBoardIndex, _channelNum);//固定DMA CH1回放
-                dotNetQTDrv.QTWriteRegister(unBoardIndex, 0x800E0000, (uint)1 * 4, 0x13);//‘1’：复位
-                dotNetQTDrv.QTWriteRegister(unBoardIndex, 0x800E0000, (uint)0 * 4, 0); // 控制四路窄带Add
-                //----Stop acquisition and close card handle
-                try
-                {
-                    dotNetQTDrv.QTStart(unBoardIndex, Comm.QTFM_COMMON_TRANSMIT_DIRECTION_BRD2PC, 0, 2000);
-                }
-                catch (Exception err)
-                {
-                    Logger.Error(err);
-                }
-                dotNetQTDrv.QTResetBoard(unBoardIndex);//关闭回放端口输出
-                dotNetQTDrv.rtp1clsWriteALGSingleRegister(unBoardIndex, 1, 0);
-                dotNetQTDrv.QTCloseBoard(unBoardIndex);
-
-            }
+            return pcieCards;
 
         }
         //绝对顺序
         public static int ConvertChannelNumber(int channelNum)
         {
             return channelNum == 1 ? 0 : channelNum - 2;
+        }
+
+        public static async Task<string> ReadAndProcessBinFileAsync(string filePath, int proportion, bool insertZero)
+        {
+            // 读取二进制文件
+            byte[] data = await File.ReadAllBytesAsync(filePath);
+
+            // 将二进制数据解析为整数，每个数由两个字节组成
+            int numSamples = data.Length / 2;
+            short[] samples = new short[numSamples];
+
+            Parallel.For(0, numSamples, i =>
+            {
+                samples[i] = BitConverter.ToInt16(data, i * 2);
+            });
+
+            Console.WriteLine($"样本数量：{samples.Length}");
+
+            // 计算最大值
+            short maxValue = samples.Max();
+            Console.WriteLine("最大值:", maxValue);
+
+            // 归一化和缩放
+            short[] scaledSamples = new short[numSamples];
+
+            Parallel.For(0, numSamples, i =>
+            {
+                double normalizedSample = (double)samples[i] / maxValue;
+                scaledSamples[i] = (short)Math.Clamp(normalizedSample * proportion, short.MinValue, short.MaxValue);
+            });
+
+            // 插入0并还原为原来的格式，即2个有符号短整数字节
+            byte[] packedData;
+            if (insertZero)
+            {
+                packedData = new byte[scaledSamples.Length * 4];
+                Parallel.For(0, scaledSamples.Length, i =>
+                {
+                    BitConverter.GetBytes(scaledSamples[i]).CopyTo(packedData, i * 4);
+                    BitConverter.GetBytes((short)0).CopyTo(packedData, i * 4 + 2);
+                });
+            }
+            else
+            {
+                packedData = new byte[scaledSamples.Length * 2];
+                Parallel.For(0, scaledSamples.Length, i =>
+                {
+                    BitConverter.GetBytes(scaledSamples[i]).CopyTo(packedData, i * 2);
+                });
+            }
+
+            // 生成新的文件名并保存在原目录中
+            string directory = Path.GetDirectoryName(filePath);
+            string baseName = Path.GetFileNameWithoutExtension(filePath);
+            string fileExt = Path.GetExtension(filePath);
+            string timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+            string outputFileName = $"{baseName}_{proportion}_{timestamp}{fileExt}";
+            string outputFilePath = Path.Combine(directory, outputFileName);
+
+            // 保存到新文件
+            await File.WriteAllBytesAsync(outputFilePath, packedData);
+
+            Console.WriteLine($"归一化后的数据已保存到 {outputFilePath}");
+            return outputFilePath;
         }
 
     }
