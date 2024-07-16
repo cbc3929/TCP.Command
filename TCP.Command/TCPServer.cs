@@ -54,13 +54,14 @@ namespace TCP.Command
         /// <returns></returns>
         public static async Task SendMsgAsync(string commandType,int channelNumber,string value)
         {
-            var message = ":REPLAY"+channelNumber+":TYPE"+commandType+":VALUE"+value;
+            var message = ":REPLY"+channelNumber+":TYPE"+commandType+":VALUE"+value;
             
             try
             {
                 NetworkStream stream = currentClient.GetStream();
                 byte[] responseBytes = Encoding.UTF8.GetBytes(message);
                 await stream.WriteAsync(responseBytes, 0, responseBytes.Length);
+                Logger.Info(message);
             }
             catch (Exception ex) 
             {

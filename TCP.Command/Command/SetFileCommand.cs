@@ -38,10 +38,9 @@ namespace TCP.Command.Command
         public async Task Cancels()
         {
             _channelState.IsRunning = false;
-            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, 0);
 
-            Logger.Info("等待5s");
-            await Task.Delay(5000);
+            Logger.Info("等待1s");
+            await Task.Delay(1000);
 
             Logger.Info("等待结束");
         }
@@ -58,38 +57,44 @@ namespace TCP.Command.Command
                 await StopPlay();
             }
             var filePath = ParseCommandForValue(_commandText);
-            await ConfigDacWorks(_card.unBoardIndex, filePath);
+            //if (!_card.HasDac)
+            //{
+                await ConfigDacWorks(_card.unBoardIndex, filePath);
+        //}
             if (_card.ChannelStates[_channelNum].Srate == 0)
             {
                 _card.ChannelStates[_channelNum].Srate = 256000;
             }
             await OnSrateChanged();
+            await Task.Delay(1000);
+            Logger.Info("1s");
             Int64 TotalSent = 0;
             EnTrig = false;
             long FileSizeB = 0;
             uint SentByte = 0;
-            await Task.Delay(1000);
             string OffLineFile = _card.FilePath[_channelNum];
+            var prop = await CaculateProportionFromFreqence();
+            Logger.Info("prop is " + prop);
+            string newPath = await ReadAndProcessBinFileAsync(OffLineFile,prop);
+            PCIeCardFactory.NewFilePathList.Add(newPath);
             _channelState.IsRunning = true;
             await InitChan();
-            //var token = _channelState.singleRunCts;
-            //token = new CancellationTokenSource();
             _channelState.IsFirstRun = false;
+            
             try
             {
-                dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, 1);
-                FileInfo fileInfo = new FileInfo(OffLineFile);
+                FileInfo fileInfo = new FileInfo(newPath);
                 if (fileInfo != null && fileInfo.Exists)
                 {
                     FileSizeB = fileInfo.Length;
-                    byte[] buffer = await ReadBigFile(OffLineFile, (int)FileSizeB);
+                    byte[] buffer = await ReadBigFile(newPath, (int)FileSizeB);
                     if (_channelState.PlaybackMethod == PlaybackMethodType.SIN)
                     {
                         SentByte = await SinglePlayAsync(_card.unBoardIndex, buffer, (uint)FileSizeB, 1000, _channelNum);
                         if (!EnTrig)
                         {
                             UInt32 val = 1 + (UInt32)(1 << (_channelNum + 3));
-                            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, (uint)1 * 4, val);
+                            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, 0x800e0000, (uint)1 * 4, val);
                             EnTrig = true;
                         }
                         TotalSent += SentByte;
@@ -97,20 +102,19 @@ namespace TCP.Command.Command
                     }
                     else
                     {
+                        
                         while (_channelState.IsRunning)
                         {
                             SentByte = await SinglePlayAsync(_card.unBoardIndex, buffer, (uint)FileSizeB, 1000, _channelNum);
-                            if (SentByte >= 2000 * 1024 * 1024)
-                            {
-                                EnTrig = false;
-                            }
-                            if (!EnTrig)
+                            if (EnTrig == false)
                             {
                                 UInt32 val = 1 + (UInt32)(1 << (_channelNum + 3));
-                                dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, (uint)1 * 4, val);
+                                dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, 0x800e0000, (uint)1 * 4, val);
                                 EnTrig = true;
+                                Logger.Info("开发 使能");
                             }
                             TotalSent += SentByte;
+                            Logger.Info(TotalSent);
                             dotNetQTDrv.QTSetRegs_i64(_card.unBoardIndex, Regs.RepTotalMB, TotalSent, _channelNum);
                             //var total = await ReportFileInfo();
                             //Logger.Info(total);
@@ -145,7 +149,7 @@ namespace TCP.Command.Command
             // 开始计时
             stopwatch.Start();
 
-            //sentByte = await SinglePlayAsync(unBoardIndex, buffer, (uint)buffer.Length, 1000, channelNum);
+            sentByte = await SinglePlayAsync(unBoardIndex, buffer, (uint)buffer.Length, 1000, channelNum);
 
             // 停止计时
             stopwatch.Stop();
@@ -167,7 +171,38 @@ namespace TCP.Command.Command
             });
             return TotalMB;
         }
+        private async Task<int> CaculateProportionFromFreqence() 
+        {
+            var freq = _channelState.FreqValue;
+            int prop = 10000;
+            if (0 < freq && freq <= 1000000000)
+            {
+                prop = 11000;
+            }
+            else if (freq > 1000000000 && freq <= 2000000000) 
+            {
+                prop = 13000;
+            }
+            else if (freq > 2000000000 && freq <= 2700000000)
+            {
+                prop = 14000;
+            }
+            //2900-3300 有个凹陷 4200-4600(28000 14-12) 4700-5100(28000 9.5)
+            else if (freq > 2700000000 && freq <= 3700000000)
+            {
+                prop = 28000;
+            }
+            else if (freq > 3700000000 && freq <= 5000000000)
+            {
+                prop = 29000;
+            }
+            else if (freq > 5000000000 && freq <= 6000000000)
+            {
+                prop = 22000;
+            }
+            return prop;
 
+        }
         private async Task StopPlay()
         {
             await Cancels();
@@ -264,6 +299,7 @@ namespace TCP.Command.Command
         }
         private async Task ConfigDacWorks(uint CardIndex, string SingleFilePath)
         {
+            _card.HasDac = true;
             //xdma 单位大小 ，如果判断文件 过小  调整 该值 保证效果
             uint XDMA_RING_BLOCK_SIZE = 4 << 20;
             //uint XDMA_RING_BLOCK_SIZE = 4 << 5;
@@ -352,6 +388,71 @@ namespace TCP.Command.Command
                 throw new ArgumentException("Invalid command format.");
             }
         }
+
+        static async Task<string> ReadAndProcessBinFileAsync(string filePath, int proportion = 11000, bool insertZero = false)
+        {
+            // 读取二进制文件
+            byte[] data = await File.ReadAllBytesAsync(filePath);
+
+            // 将二进制数据解析为整数，每个数由两个字节组成
+            int numSamples = data.Length / 2;
+            short[] samples = new short[numSamples];
+
+            Parallel.For(0, numSamples, i =>
+            {
+                samples[i] = BitConverter.ToInt16(data, i * 2);
+            });
+
+            Console.WriteLine($"样本数量：{samples.Length}");
+
+            // 计算最大值
+            short maxValue = samples.Max();
+            Console.WriteLine("最大值:", maxValue);
+
+            // 归一化和缩放
+            short[] scaledSamples = new short[numSamples];
+
+            Parallel.For(0, numSamples, i =>
+            {
+                double normalizedSample = (double)samples[i] / maxValue;
+                scaledSamples[i] = (short)Math.Clamp(normalizedSample * proportion, short.MinValue, short.MaxValue);
+            });
+
+            // 插入0并还原为原来的格式，即2个有符号短整数字节
+            byte[] packedData;
+            if (insertZero)
+            {
+                packedData = new byte[scaledSamples.Length * 4];
+                Parallel.For(0, scaledSamples.Length, i =>
+                {
+                    BitConverter.GetBytes(scaledSamples[i]).CopyTo(packedData, i * 4);
+                    BitConverter.GetBytes((short)0).CopyTo(packedData, i * 4 + 2);
+                });
+            }
+            else
+            {
+                packedData = new byte[scaledSamples.Length * 2];
+                Parallel.For(0, scaledSamples.Length, i =>
+                {
+                    BitConverter.GetBytes(scaledSamples[i]).CopyTo(packedData, i * 2);
+                });
+            }
+
+            // 生成新的文件名并保存在原目录中
+            string directory = Path.GetDirectoryName(filePath);
+            string baseName = Path.GetFileNameWithoutExtension(filePath);
+            string fileExt = Path.GetExtension(filePath);
+            string timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+            string outputFileName = $"{baseName}_{proportion}_{timestamp}{fileExt}";
+            string outputFilePath = Path.Combine(directory, outputFileName);
+
+            // 保存到新文件
+            await File.WriteAllBytesAsync(outputFilePath, packedData);
+
+            return outputFilePath;
+        }
+
+
         public async Task DUCConfig(uint CardIndex, int channelNum)
         {
             await Task.Run(() =>
@@ -453,6 +554,7 @@ namespace TCP.Command.Command
             uint PerLen = 0;
             uint SentByte = 0;
             do
+
             {
                 PerLen = (reqLen > (uint)bytecount) ? (uint)bytecount : reqLen;
                 dotNetQTDrv.QTSendData(unBoardIndex, buffer, offset, (uint)PerLen, ref SentByte, 1000, DmaChIdx);

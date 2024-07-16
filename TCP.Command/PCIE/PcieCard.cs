@@ -31,6 +31,8 @@ namespace TCP.Command.PCIE
         private int PackLenB = 128 * 1000;
         private int PackNum = 50;
 
+        public bool HasDac { get; set; }
+
         private Mutex mutex_cb;
         public uint SampleRate_WB;
 
@@ -125,6 +127,7 @@ namespace TCP.Command.PCIE
             SplitFileSizeMB = 1024;// = 1024;
             MaxNumFiles = 0xffffffff;
             MaxFileSizeMB = 13312 * 1024;
+            HasDac = false;
             PPDATABUFLEN = 4 << 20;
             ReplayedLenB = 0;
             SampleRate = (uint)ReqSrate;

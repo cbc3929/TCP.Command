@@ -22,10 +22,10 @@ namespace TCP.Command
         public static ICommand ParseCommand(string commandText,int abschanNum)
         {
             var card = PCIeCardFactory.CardParam[abschanNum];
-            var chanNum = abschanNum == 1 ? 0 : abschanNum - 2;
+            //var chanNum = abschanNum == 1 ? 0 : abschanNum - 2;
             if (commandText.Contains("?"))
             {
-                return new QueryStatusCommand(commandText, chanNum, card);
+                return new QueryStatusCommand(commandText, abschanNum, card);
             }
             
             else if (commandText.Contains("ARB:SETTing:LOAD")) 
