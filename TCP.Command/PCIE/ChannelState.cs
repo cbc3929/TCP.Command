@@ -50,6 +50,8 @@ namespace TCP.Command.PCIE
         /// </summary>
         public int CurrentFIR { get; set; }
 
+        public int Props { get; set; }
+
         public decimal RF_Atten { get; set; }
         public decimal IF_Atten { get; set; }
         /// <summary>
@@ -94,6 +96,7 @@ namespace TCP.Command.PCIE
             IsLoop = false;
             Magnitude = 500;
             DDS = 0;
+            Props = 10000;
             RF_Atten = 0;
             IF_Atten = 0;
             IsRunning = false;

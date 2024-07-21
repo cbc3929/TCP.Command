@@ -23,6 +23,7 @@ namespace TCP.Command.Command
         private ChannelState _channelState;
         private CancellationTokenSource _cts;
         private bool EnTrig;
+        private bool IsNBcard;
         public SetFileCommand(int abschannelNum, string commandText)
         {
             _card = PCIeCardFactory.CardParam[abschannelNum];
@@ -32,17 +33,17 @@ namespace TCP.Command.Command
             _channelState = _card.ChannelStates[_channelNum];
             _cts = _channelState.singleRunCts;
             EnTrig = false;
+            IsNBcard = abschannelNum > 1 ? true : false;
         }
 
 
         public async Task Cancels()
         {
-            _channelState.IsRunning = false;
-
-            Logger.Info("等待1s");
-            await Task.Delay(1000);
-
-            Logger.Info("等待结束");
+            await SetDACOnOrOff(false);
+            //把调制关闭
+            uint reg = (uint)_channelState.Props << 16 | 0;
+            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, reg);
+            _channelState.BBSwitch = false;
         }
 
         public void Cancel()
@@ -52,35 +53,34 @@ namespace TCP.Command.Command
 
         public async Task ExecuteAsync()
         {
+            if (!_card.HasDac) 
+            {
+                await ConfigDacWorks(_card.unBoardIndex);
+            }
             if (!_channelState.IsFirstRun)
             {
-                await StopPlay();
+                Cancel();
             }
             var filePath = ParseCommandForValue(_commandText);
-            //if (!_card.HasDac)
-            //{
-                await ConfigDacWorks(_card.unBoardIndex, filePath);
-        //}
+
             if (_card.ChannelStates[_channelNum].Srate == 0)
             {
                 _card.ChannelStates[_channelNum].Srate = 256000;
             }
-            await OnSrateChanged();
-            await Task.Delay(1000);
-            Logger.Info("1s");
+            _card.FilePath[_channelNum] = filePath;
             Int64 TotalSent = 0;
             EnTrig = false;
             long FileSizeB = 0;
             uint SentByte = 0;
             string OffLineFile = _card.FilePath[_channelNum];
             var prop = await CaculateProportionFromFreqence();
+            _channelState.Props = prop;
             Logger.Info("prop is " + prop);
-            string newPath = await ReadAndProcessBinFileAsync(OffLineFile,prop);
+            string newPath = await ReadAndProcessBinFileAsync(OffLineFile,IsNBcard,prop);
             PCIeCardFactory.NewFilePathList.Add(newPath);
             _channelState.IsRunning = true;
-            await InitChan();
+            //await InitChan();
             _channelState.IsFirstRun = false;
-            
             try
             {
                 FileInfo fileInfo = new FileInfo(newPath);
@@ -88,38 +88,16 @@ namespace TCP.Command.Command
                 {
                     FileSizeB = fileInfo.Length;
                     byte[] buffer = await ReadBigFile(newPath, (int)FileSizeB);
-                    if (_channelState.PlaybackMethod == PlaybackMethodType.SIN)
-                    {
-                        SentByte = await SinglePlayAsync(_card.unBoardIndex, buffer, (uint)FileSizeB, 1000, _channelNum);
-                        if (!EnTrig)
-                        {
-                            UInt32 val = 1 + (UInt32)(1 << (_channelNum + 3));
-                            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, 0x800e0000, (uint)1 * 4, val);
-                            EnTrig = true;
-                        }
-                        TotalSent += SentByte;
-                        dotNetQTDrv.QTSetRegs_i64(_card.unBoardIndex, Regs.RepTotalMB, TotalSent, _channelNum);
-                    }
-                    else
-                    {
-                        
-                        while (_channelState.IsRunning)
-                        {
-                            SentByte = await SinglePlayAsync(_card.unBoardIndex, buffer, (uint)FileSizeB, 1000, _channelNum);
-                            if (EnTrig == false)
-                            {
-                                UInt32 val = 1 + (UInt32)(1 << (_channelNum + 3));
-                                dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, 0x800e0000, (uint)1 * 4, val);
-                                EnTrig = true;
-                                Logger.Info("开发 使能");
-                            }
-                            TotalSent += SentByte;
-                            Logger.Info(TotalSent);
-                            dotNetQTDrv.QTSetRegs_i64(_card.unBoardIndex, Regs.RepTotalMB, TotalSent, _channelNum);
-                            //var total = await ReportFileInfo();
-                            //Logger.Info(total);
-                        }
-                    }
+                    SetSendDDRDataConfig(buffer.Length);
+                    //把调制打开
+                    //uint reg = (uint)_channelState.Props << 16 | 1;
+                    //dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, reg);
+                    //_channelState.BBSwitch = true;
+                    //下发文件一次就好
+                    await SinglePlayAsync(_card.unBoardIndex, buffer, (uint)FileSizeB, 1000, _channelNum);
+                    dotNetQTDrv.QTSetRegs_i64(_card.unBoardIndex, Regs.RepTotalMB, TotalSent, _channelNum);
+                    //配置寄存器，使能打开
+                    await SetDACOnOrOff(true);
                 }
 
             }
@@ -141,24 +119,154 @@ namespace TCP.Command.Command
             });
         }
 
-        private async Task<double> MeasureAndCalculateTransferRateAsync(byte[] buffer, uint unBoardIndex, int channelNum)
+        private void SetSendDDRDataConfig(long fileSize)
         {
-            Stopwatch stopwatch = new Stopwatch();
-            uint sentByte = 0;
+            uint DacBaseAddr1 = 0x80080000;//基地址
 
-            // 开始计时
-            stopwatch.Start();
+            uint offAddr_DACDataSartAddr = 0;//偏移地址 回放数据的起始地址
+            uint offAddr_DACDataLen = 0;     //偏移地址 回放数据的长度
+            uint offAddr_DACDataSartSend = 0;//偏移地址 开始下发数据信号
 
-            sentByte = await SinglePlayAsync(unBoardIndex, buffer, (uint)buffer.Length, 1000, channelNum);
+            uint regValue_DACDataSartAddr = 0;//值 回放数据的起始地址;由ddr硬件容量决定。之后换片后，第1，3DMA通道会改成1GiB(1*1024*1024*1024)
+            uint regValue_DACDataLen = 0;     //值 回放数据的长度，单位字节，步长256（32字节的的整数倍），设置的长度 = 实际长度-1
+            uint regValue_DACDataSartSend = 0;//值 开始下发数据信号
 
-            // 停止计时
-            stopwatch.Stop();
+            switch (_channelNum)
+            {
+                case 0:
+                    //dma "n" 回放数据的起始地址; 地址0x80080018，写入值0 都为固定值
+                    offAddr_DACDataSartAddr = 0x18;//偏移地址 固定
+                    regValue_DACDataSartAddr = 0;//固定
 
-            double elapsedSeconds = stopwatch.Elapsed.TotalSeconds;
-            double transferRate = sentByte / elapsedSeconds; // 字节/秒
+                    //dma“n” 回放数据的长度，单位字节，步长256（32字节的的整数倍），设置的长度 = 实际长度-1
+                    offAddr_DACDataLen = 0x1c;//偏移地址 固定
+                    regValue_DACDataLen = (uint)fileSize - 1;// 40960000 - 1;//104857600 - 1;//测试数据，固定100MiB；根据实际调整补齐                      
 
-            // 返回字节/微秒的速率
-            return transferRate / 1_000_000;
+                    //dma"n" 开始下发数据信号
+                    offAddr_DACDataSartSend = 0x14;//偏移地址 固定
+                    regValue_DACDataSartSend = 1;//固定
+                    break;
+                case 1:
+                    //dma "n" 回放数据的起始地址; 地址0x80080018，写入值0 都为固定值
+                    offAddr_DACDataSartAddr = 0x24;//偏移地址 固定 
+                    regValue_DACDataSartAddr = 1 * 1024 * 1024 * 1024;//固定 2024年7月20日 change
+
+                    //dma“n” 回放数据的长度，单位字节，步长256（32字节的的整数倍），设置的长度 = 实际长度-1
+                    offAddr_DACDataLen = 0x28;//偏移地址 固定
+                    regValue_DACDataLen = (uint)fileSize - 1;//40960000 - 1;// 40960000 - 1;//104857600 - 1;//测试数据，固定100MiB；根据实际调整补齐                      
+
+                    //dma"n" 开始下发数据信号
+                    offAddr_DACDataSartSend = 0x20;//偏移地址 固定
+                    regValue_DACDataSartSend = 1;//固定
+                    break;
+                case 2:
+                    //dma "n" 回放数据的起始地址; 地址0x80080018，写入值0 都为固定值
+                    offAddr_DACDataSartAddr = 0x30;//偏移地址 固定
+                    regValue_DACDataSartAddr = 0;//固定
+
+                    //dma“n” 回放数据的长度，单位字节，步长256（32字节的的整数倍），设置的长度 = 实际长度-1
+                    offAddr_DACDataLen = 0x34;//偏移地址 固定
+                    regValue_DACDataLen = (uint)fileSize - 1;//40960000 - 1;//40960000 - 1;//104857600 - 1;//测试数据，固定100MiB；根据实际调整补齐                      
+
+                    //dma"n" 开始下发数据信号
+                    offAddr_DACDataSartSend = 0x2c;//偏移地址 固定
+                    regValue_DACDataSartSend = 1;//固定
+                    break;
+                case 3:
+                    //dma "n" 回放数据的起始地址; 地址0x80080018，写入值0 都为固定值
+                    offAddr_DACDataSartAddr = 0x3c;//偏移地址 固定
+                    regValue_DACDataSartAddr = 1 * 1024 * 1024 * 1024;//固定 2024年7月20日 change
+
+                    //dma“n” 回放数据的长度，单位字节，步长256（32字节的的整数倍），设置的长度 = 实际长度-1
+                    offAddr_DACDataLen = 0x40;//偏移地址 固定
+                    regValue_DACDataLen = (uint)fileSize - 1;//40960000 - 1;//40960000 - 1;//104857600 - 1;//测试数据，固定100MiB；根据实际调整补齐                      
+
+                    //dma"n" 开始下发数据信号
+                    offAddr_DACDataSartSend = 0x38;//偏移地址 固定
+                    regValue_DACDataSartSend = 1;//固定
+                    break;
+                default:
+                    Logger.Info($"设置发送DDR数据参数，DMA通道:{_channelNum}");
+                    return;
+            }
+            //dma "n" 回放数据的起始地址;
+            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, DacBaseAddr1, offAddr_DACDataSartAddr, regValue_DACDataSartAddr);
+            //dma“n” 回放数据的长度
+            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, DacBaseAddr1, offAddr_DACDataLen, regValue_DACDataLen);
+
+            //告诉逻辑，回放数据的起始地址回到0 add 2024-7-21
+            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, DacBaseAddr1, offAddr_DACDataSartSend, 0);
+            //dma"n" 开始下发数据信号
+            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, DacBaseAddr1, offAddr_DACDataSartSend, regValue_DACDataSartSend);
+        }
+
+        private async Task SetDACOnOrOff( bool IsEnablePlay)
+        {
+            var channelstate = _channelState;
+
+
+            uint DacBaseAddr1 = 0x80080000;
+            uint offAddr = 0x14;//ddr 开始读取数据
+            uint regValue = 2;//ddr 开始读取数据
+
+            switch (_channelNum)
+            {
+                case 0:
+                    offAddr = 0x14;//ddr 开始/停止读取数据
+                    break;
+                case 1:
+                    offAddr = 0x20;//ddr 开始/停止读取数据
+                    break;
+                case 2:
+                    offAddr = 0x2c;//ddr 开始/停止读取数据
+                    break;
+                case 3:
+                    offAddr = 0x38;//ddr 开始/停止读取数据
+                    break;
+                default:
+                    Logger.Info($"设置DAC打开或关闭，DMA通道{_channelNum}");
+                    return;
+            }
+
+            if (IsEnablePlay)
+            {
+                regValue = 2;//ddr 开始读取数据
+            }
+            else
+            {
+                regValue = 0;//ddr 停止读取数据
+            }
+            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, DacBaseAddr1, offAddr, regValue);
+            if (!IsEnablePlay)
+            {
+                await Task.Delay(100);//100ms
+            }
+            if (IsEnablePlay)
+            {
+                //下发法罗
+                await OnSrateChanged();
+            }
+
+            uint ba = 0x800e0000;
+            uint os = 1 * 4;
+            uint reg = 0;
+            uint value = 0;
+            uint vald_out = 0;//通道n回放开始使能
+
+
+            dotNetQTDrv.QTReadRegister(_card.unBoardIndex, ref ba, ref os, ref reg);
+            
+            if (IsEnablePlay)
+            {
+                vald_out = (reg | ((uint)1 << (_channelNum +3)));
+            }
+            else
+            {
+                vald_out = (reg & (~((uint)1 << (_channelNum + 3))));
+            }
+            //给DA数据开关
+            dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, 0x800e0000, os, vald_out);
+
         }
 
         private async Task<int> ReportFileInfo()
@@ -297,7 +405,7 @@ namespace TCP.Command.Command
             dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 13 * 4, farrowValues);
 
         }
-        private async Task ConfigDacWorks(uint CardIndex, string SingleFilePath)
+        private async Task ConfigDacWorks(uint CardIndex)
         {
             _card.HasDac = true;
             //xdma 单位大小 ，如果判断文件 过小  调整 该值 保证效果
@@ -326,8 +434,6 @@ namespace TCP.Command.Command
                 _card.ld_ChkRT(dotNetQTDrv.QTDataFormatSet(CardIndex, 1), "设置数据格式");
             else
                 _card.ld_ChkRT(dotNetQTDrv.QTDataFormatSet(CardIndex, 0), "设置数据格式");
-            byte[] fileloc = new byte[(int)255];
-            fileloc = System.Text.Encoding.Default.GetBytes(SingleFilePath);
             /*byte[] */
             if (EnDDS)
                 _card.ld_ChkRT(dotNetQTDrv.QTSetRegs_i32(CardIndex, Regs.ReplayDDS, 1), "使能回放标志为");
@@ -337,9 +443,7 @@ namespace TCP.Command.Command
             //按DMA通道设置回放文件参数
             //DmaEnChMask = 0;
             Logger.Info("CC重置回放通道");
-            dotNetQTDrv.LDReplayInit(CardIndex, _channelNum);
-            _card.FilePath[_channelNum] = SingleFilePath;
-
+            //dotNetQTDrv.LDReplayInit(CardIndex, _channelNum);
 
             //----Setup work mode, acquisition parameters
             var uncompressMode = 0;
@@ -361,7 +465,7 @@ namespace TCP.Command.Command
                 _card.ld_ChkRT(dotNetQTDrv.QTSetRegs_i32(CardIndex, Regs.ReplayDDS, 0), "禁止回放标志位");
             _card.ld_ChkRT(dotNetQTDrv.QTSetRegs_i32(CardIndex, Regs.IQ_en, 0), "禁止IQ回放");
 
-            if (true)
+            if (false)
                 //开启循环回放单个或者文件列表功能
                 _card.ld_ChkRT(dotNetQTDrv.QTSetRegs_i32(CardIndex, Regs.LoopMode, 1, _channelNum), "开启循环回放功能");
             else
@@ -370,8 +474,7 @@ namespace TCP.Command.Command
 
             Int64 trigdelay = (Int64)2 * (_card.SampleRate / 8 * 2);
             _card.ld_ChkRT(dotNetQTDrv.QTStart(CardIndex, Comm.QTFM_COMMON_TRANSMIT_DIRECTION_PC2BRD, 1, 2000), "开启DMA");
-            if (_card.EnALG)
-                await DUCConfig(CardIndex, _channelNum);
+           
         }
 
         private string ParseCommandForValue(string command)
@@ -389,7 +492,7 @@ namespace TCP.Command.Command
             }
         }
 
-        static async Task<string> ReadAndProcessBinFileAsync(string filePath, int proportion = 11000, bool insertZero = false)
+        static async Task<string> ReadAndProcessBinFileAsync(string filePath, bool IsNbcard, int proportion = 11000, bool insertZero = false)
         {
             // 读取二进制文件
             byte[] data = await File.ReadAllBytesAsync(filePath);
@@ -426,6 +529,7 @@ namespace TCP.Command.Command
                 Parallel.For(0, scaledSamples.Length, i =>
                 {
                     BitConverter.GetBytes(scaledSamples[i]).CopyTo(packedData, i * 4);
+                    short PreValue = i > 0 ? scaledSamples[i - 1] : (short)0;
                     BitConverter.GetBytes((short)0).CopyTo(packedData, i * 4 + 2);
                 });
             }
@@ -437,6 +541,20 @@ namespace TCP.Command.Command
                     BitConverter.GetBytes(scaledSamples[i]).CopyTo(packedData, i * 2);
                 });
             }
+
+            int originalLength = packedData.Length;
+            int fillNumber = 32;
+            if (!IsNbcard) 
+            {
+                fillNumber = 64;
+            }
+            int padding = (fillNumber - (packedData.Length % fillNumber)) % fillNumber;
+            if (padding < 0) 
+            {
+                Array.Resize(ref packedData, packedData.Length + padding);
+            }
+            Logger.Info($"原始长度：{originalLength} 填充了 ：{ padding} 字节长度" );
+
 
             // 生成新的文件名并保存在原目录中
             string directory = Path.GetDirectoryName(filePath);
@@ -554,7 +672,6 @@ namespace TCP.Command.Command
             uint PerLen = 0;
             uint SentByte = 0;
             do
-
             {
                 PerLen = (reqLen > (uint)bytecount) ? (uint)bytecount : reqLen;
                 dotNetQTDrv.QTSendData(unBoardIndex, buffer, offset, (uint)PerLen, ref SentByte, 1000, DmaChIdx);
@@ -563,13 +680,10 @@ namespace TCP.Command.Command
             } while (reqLen > 0);
             bytes_sent = unLen - reqLen;
         }
-        private async Task<uint> SinglePlayAsync(uint unBoardIndex, byte[] buffer, uint unLen, uint unTimeOut, int DmaChIdx)
+        private async Task SinglePlayAsync(uint unBoardIndex, byte[] buffer, uint unLen, uint unTimeOut, int DmaChIdx)
         {
             uint bytesent = 0;
-            await Task.Run(() => SinglePlaySync(unBoardIndex, buffer, unLen, ref bytesent, unTimeOut, DmaChIdx));
-            return bytesent;
-
-
+            SinglePlaySync(unBoardIndex, buffer, unLen, ref bytesent, unTimeOut, DmaChIdx);
         }
     }
 }

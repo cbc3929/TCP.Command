@@ -60,13 +60,13 @@ namespace TCP.Command
                     dotNetQTDrv.QTGetRegs_i32(unBoardIndex, Regs.RepKeepRun, ref RepKeepRun, DmaChIndex);//2023年3月9日23:32:23：增加DmaChIndex变量，获得当前DMA通道的变量值
                 } while (RepKeepRun != 0);
 
-                dotNetQTDrv.LDSetParam(unBoardIndex, Comm.CMD_MB_ENABLE_REPLAY_MODE, 1, 0, 0, 0xFFFFFFFF);// 选择DAC寄存器
+                //dotNetQTDrv.LDSetParam(unBoardIndex, Comm.CMD_MB_ENABLE_REPLAY_MODE, 1, 0, 0, 0xFFFFFFFF);// 选择DAC寄存器
                 //dotNetQTDrv.LDReplayStop(_card.unBoardIndex, _channelNum);//固定DMA CH1回放
-                dotNetQTDrv.QTWriteRegister(unBoardIndex, 0x800E0000, (uint)1 * 4, 0x13);//‘1’：复位
+                //dotNetQTDrv.QTWriteRegister(unBoardIndex, 0x800E0000, (uint)1 * 4, 0x13);//‘1’：复位
                 //----Stop acquisition and close card handle
                 try
                 {
-                    dotNetQTDrv.QTStart(unBoardIndex, Comm.QTFM_COMMON_TRANSMIT_DIRECTION_BRD2PC, 0, 2000);
+                    //dotNetQTDrv.QTStart(unBoardIndex, Comm.QTFM_COMMON_TRANSMIT_DIRECTION_BRD2PC, 0, 2000);
                 }
                 catch (Exception err)
                 {

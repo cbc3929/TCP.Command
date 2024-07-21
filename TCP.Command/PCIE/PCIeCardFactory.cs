@@ -33,7 +33,7 @@ namespace TCP.Command.PCIE
         {
 
 
-            for (uint i = 0; i < 2; i++)
+            for (uint i = 1; i < 2; i++)
             {
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableReplay, 0);
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableStreaming, 1);

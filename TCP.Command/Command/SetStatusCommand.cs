@@ -77,15 +77,31 @@ namespace TCP.Command
             else if (_commandText.Contains(":BB:MODE"))
             {
                 var value = ParseCommandForValue(_commandText);
+               
                 if (value.Contains("On") || value.Contains("true") || value.Contains("1"))
                 {
-                    dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, 1);
                     channelstate.BBSwitch = true;
+                    
+                    uint bbmode = 0;
+                    for (var i = _card.ChannelCount-1; i > -1; i--)
+                    {
+                        bbmode = bbmode | (uint)(_card.ChannelStates[i].BBSwitch ? 0 : 1);
+                    }
+                    Logger.Info($"{bbmode}");
+                    uint reg = (uint)channelstate.Props << 16 | bbmode;
+                    dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, reg);
                 }
                 else
                 {
-                    dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, 0);
                     channelstate.BBSwitch = false;
+                    uint bbmode = 0;
+                    for (var i = _card.ChannelCount - 1; i > -1; i--)
+                    {
+                        bbmode = bbmode | (uint)(_card.ChannelStates[i].BBSwitch ? 0 : 1);
+                    }
+                    Logger.Info($"{bbmode}");
+                    uint reg = (uint)channelstate.Props << 16 | bbmode;
+                    dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, reg);
                 }
             }
             else if (_commandText.Contains("ARB:SWITCH"))
