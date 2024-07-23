@@ -20,6 +20,8 @@ namespace TCP.Command.PCIE
 
         public string TicTime { get; set; }
         public bool IsRunning { get; set; }
+
+        public int IntervalTimeUs { get; set; }
         public long Srate
         {
             get { return _srate; }
@@ -71,6 +73,8 @@ namespace TCP.Command.PCIE
 
         public char FreqSubUnit { get; set; }
 
+        public long FilePointCount { get; set; }
+
         public char SampSubUnit { get; set; }
 
         public UInt32 DDS { get; set; }
@@ -95,6 +99,7 @@ namespace TCP.Command.PCIE
             PlaybackMethod = PlaybackMethodType.REP;
             IsLoop = false;
             Magnitude = 500;
+            FilePointCount = 0;
             DDS = 0;
             Props = 10000;
             RF_Atten = 0;

@@ -163,6 +163,26 @@ namespace TCP.Command.PCIE
             NotifySizeB = new uint[ChannelCount];
             RepKeepRun = new int[ChannelCount];
         }
+        public void Update_Num21(uint powerChannelNum, uint powerMulti) 
+        {
+            uint reg = 0;
+            //把所有的通道 调制检查一遍 下发
+            for (int i = 0; i < ChannelCount; i++)
+            {
+                var channelstate = ChannelStates[i];
+                if (channelstate.BBSwitch) 
+                {
+                    reg |= (uint)(1 << i);
+                }
+            }
+            //8-5 功率系数选择通道
+            reg |= (powerChannelNum & 0xF) << 5;
+            //16-31 功率系数
+            reg |= (powerMulti & 0xFFFF) << 16;
+
+            dotNetQTDrv.QTWriteRegister(unBoardIndex, DacBaseAddr, 21 * 4, reg);
+        
+        }
 
         //protected void InitializeChannelStates()
         //{

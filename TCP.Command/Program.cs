@@ -44,12 +44,11 @@ namespace TCP.Command
                 }
             
             }
-            for (uint unBoardIndex = 0; unBoardIndex < list.Count; unBoardIndex++) 
+            for (uint unBoardIndex = 0; unBoardIndex < list.Count; unBoardIndex++)
             {
-                for (int i = 0; i < list[(int)unBoardIndex].ChannelCount; i++) 
+                for (int i = 0; i < list[(int)unBoardIndex].ChannelCount; i++)
                 {
                     list[(int)unBoardIndex].ChannelStates[i].IsRunning = false;
-                    Logger.Info("Closing " + list[(int)unBoardIndex].DeviceName + "'s No." + i + " Channel");
                 }
                 int RepKeepRun = -99;
                 int DmaChIndex = 0;

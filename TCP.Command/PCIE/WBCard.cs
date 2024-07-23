@@ -44,18 +44,18 @@ namespace TCP.Command.PCIE
                 //Thread.Sleep(1000);
                 //dotNetQTDrv.LDSetParam(0, 836u, 1, 0, 0, 1000);//output=0
                 //Thread.Sleep(1000);
-                dotNetQTDrv.LDSetParam(0, Comm.CMD_MB_RESET_ADC_INTERFACE, 0, 0, 0, 10000);
+                dotNetQTDrv.LDSetParam(uncardIndex, Comm.CMD_MB_RESET_ADC_INTERFACE, 0, 0, 0, 10000);
                 //sync状态
                 for (int j = 0; j < 2; j++)
-                    dotNetQTDrv.QTReadRegister(0, ref ba[j], ref os[0], ref dac_jesd_sync[j]);
+                    dotNetQTDrv.QTReadRegister(unBoardIndex, ref ba[j], ref os[0], ref dac_jesd_sync[j]);
                 //jesd regs
                 for (int j = 0; j < 2; j++)
-                    dotNetQTDrv.QTReadRegister(0, ref ba[j], ref os[1], ref reg[j]);
+                    dotNetQTDrv.QTReadRegister(unBoardIndex, ref ba[j], ref os[1], ref reg[j]);
                 //clock freq
-                dotNetQTDrv.QTWriteRegister(0, 0x80030000, 0x0, 0x10000000);
-                dotNetQTDrv.QTReadRegister(0, ref ba[2], ref os[2], ref reg[2]);
+                dotNetQTDrv.QTWriteRegister(unBoardIndex, 0x80030000, 0x0, 0x10000000);
+                dotNetQTDrv.QTReadRegister(unBoardIndex, ref ba[2], ref os[2], ref reg[2]);
                 //PLL lock
-                dotNetQTDrv.QTReadRegister(0, ref ba[3], ref os[3], ref reg[3]);
+                dotNetQTDrv.QTReadRegister(unBoardIndex, ref ba[3], ref os[3], ref reg[3]);
                 //fmc_sdr_dump_PLL(i);
             } while ((dac_jesd_sync[0] != 0x10001) || (dac_jesd_sync[1] != 0x10001));
             return 0;

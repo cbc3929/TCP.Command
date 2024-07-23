@@ -60,7 +60,7 @@ namespace TCP.Command
             {
                 bool isOn = valueUnitPart.Contains("On") || valueUnitPart.Contains("1") || valueUnitPart.Contains("true");
                 //判断是宽带还是窄带
-                var channelNum = _absChannelNum > 1 ? 0 : _absChannelNum - 2;
+                var channelNum = _absChannelNum >= 1 ? 0 : _absChannelNum - 2;
                 //先控制状态，再去检查
                 channelstate.RFSwitch = isOn;
                 Logger.Error("rf " + isOn);
@@ -81,28 +81,14 @@ namespace TCP.Command
                 if (value.Contains("On") || value.Contains("true") || value.Contains("1"))
                 {
                     channelstate.BBSwitch = true;
-                    
-                    uint bbmode = 0;
-                    for (var i = _card.ChannelCount-1; i > -1; i--)
-                    {
-                        bbmode = bbmode | (uint)(_card.ChannelStates[i].BBSwitch ? 0 : 1);
-                    }
-                    Logger.Info($"{bbmode}");
-                    uint reg = (uint)channelstate.Props << 16 | bbmode;
-                    dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, reg);
+                   
                 }
                 else
                 {
                     channelstate.BBSwitch = false;
-                    uint bbmode = 0;
-                    for (var i = _card.ChannelCount - 1; i > -1; i--)
-                    {
-                        bbmode = bbmode | (uint)(_card.ChannelStates[i].BBSwitch ? 0 : 1);
-                    }
-                    Logger.Info($"{bbmode}");
-                    uint reg = (uint)channelstate.Props << 16 | bbmode;
-                    dotNetQTDrv.QTWriteRegister(_card.unBoardIndex, _card.DacBaseAddr, 21 * 4, reg);
+                   
                 }
+                _card.Update_Num21((uint)_channelNumber, (uint)channelstate.Props);
             }
             else if (_commandText.Contains("ARB:SWITCH"))
             {
@@ -196,6 +182,11 @@ namespace TCP.Command
                         break;
                     case "REP":
                         _card.ChannelStates[_channelNumber].PlaybackMethod = PlaybackMethodType.REP;
+                        string subUnit = valueUnitPart.Substring(0, valueUnitPart.Length - 2);
+                        if (int.TryParse(subUnit, out int value))
+                        {
+                            _card.ChannelStates[_channelNumber].IntervalTimeUs = value;
+                        }
                         break;
                     case "TIC":
                         _card.ChannelStates[_channelNumber].PlaybackMethod = PlaybackMethodType.TIC;
