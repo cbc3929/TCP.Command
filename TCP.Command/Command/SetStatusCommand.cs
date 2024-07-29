@@ -25,6 +25,7 @@ namespace TCP.Command
         private int _channelNumber;
         private string _commandText;
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+        private bool IsNBcard;
         //setting command
 
         public SetStatusCommand(string commandText, int abschannelNum)
@@ -33,6 +34,7 @@ namespace TCP.Command
             _absChannelNum = abschannelNum;
             _channelNumber = PCIeCardFactory.ConvertChannelNumber(abschannelNum);
             _commandText = commandText;
+            IsNBcard = _absChannelNum>1?true:false;
         }
 
         private string ParseCommandForValue(string command)
@@ -141,11 +143,16 @@ namespace TCP.Command
             {
                 int unitStartIndex = valueUnitPart.IndexOf("dBm");
                 string valueStr = valueUnitPart.Substring(0, unitStartIndex);
-                var value = double.Parse(valueStr);
+                var ss = double.Parse(valueStr);
+                if (ss > 10 || ss < -80) 
+                {
+                    return;
+                }
+                var value = 10 - ss;
                 var state = channelstate;
                 if (state != null)
                 {
-                    state.Power = (int)value;                 
+                    state.Power = (int)ss;                 
                     if (value > 90 || value < 0)
                     {
                         Logger.Error("衰减范围超过阈值!");
@@ -299,9 +306,13 @@ namespace TCP.Command
                 reg[2] = (UInt32)RF_Atten + ((UInt32)IF_Atten << 6) + ((UInt32)RF_onff << 12);
                 dotNetQTDrv.QTWriteRegister(CardIndex, ba, 4 * 17, reg[2]);
             }
-            reg[0] = (UInt32)rf_chan_type + (rf_chan_num << 5) + (Cmd_type << 10) + (1 << 16);
+            if (IsNBcard) 
+            {
+                rf_chan_num = rf_chan_num + 1;
+            }
+            reg[0] = (rf_chan_type & 0x1F) | ((rf_chan_num & 0x1F) << 5) | ((Cmd_type & 0x1F) << 10) | (1 << 16);
             dotNetQTDrv.QTWriteRegister(CardIndex, ba, 4 * 15, reg[0]);
-            reg[0] = (UInt32)rf_chan_type + (rf_chan_num << 5) + (Cmd_type << 10) + (0 << 16);
+            reg[0] = (rf_chan_type & 0x1F) | ((rf_chan_num & 0x1F) << 5) | ((Cmd_type & 0x1F) << 10) | (0 << 16);
             dotNetQTDrv.QTWriteRegister(CardIndex, ba, 4 * 15, reg[0]);
             return 0;
         }

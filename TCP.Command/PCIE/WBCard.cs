@@ -1,24 +1,89 @@
 ﻿using Lookdata;
+using NLog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace TCP.Command.PCIE
 {
     internal class WBCard : PcieCard
     {
+        private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+        private new WBconfig _config;
+        private bool isPrint;
+        private int _printTicTime;
         public WBCard( uint cardIndex,int numberofcards) : base(cardIndex,1, numberofcards)
         {
             FS = 2400000000;
-            SampleRate_WB = 2800000000;
-            SplitFileSizeMB = 10 * 1024;
+            _configpath = "Config/WBconfig.json";
+            _config =LoadConfig(_configpath);
+            SetupFileWatcher(_configpath);
         }
 
-        public override void CancelOperations(int channelNo)
+        private async Task StartPrint() 
         {
-            throw new NotImplementedException();
+            while (isPrint) 
+            {
+                PrintTimeClock();
+                await Task.Delay(_printTicTime);
+            }
+        }
+
+        private WBconfig LoadConfig(string filePath) 
+        {
+            try
+            {
+                string jsonString = File.ReadAllText(filePath);
+                var config = JsonSerializer.Deserialize<WBconfig>(jsonString);
+                Logger.Info($"读取{DeviceName}配置成功"); 
+                Update_Num14(config);
+                isPrint = config.openPrintAbsTimeClock;
+                _printTicTime = config.printTic;
+                if (isPrint)
+                {
+                    Task.Run(() =>StartPrint());
+                }
+                return config;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error reading config file: {ex.Message}");
+                return null;
+            }
+
+        }
+
+        public override int GetMappedValue(long inputValue)
+        {
+            foreach (var range in _config.ranges)
+            {
+                if (inputValue >= range.min && inputValue <= range.max)
+                {
+                    return range.value;
+                }
+            }
+            // 如果未找到合适的区间，返回默认值
+            Logger.Info("未能匹配到射频功率对应的功率系数，使用默认系数" + _config.defaultValue);
+            return _config.defaultValue;
+        }
+
+        public void Update_Num14(WBconfig config)
+        {
+            uint one = config.isIntervalTime ? 1u : 0u;
+            //窄带读取 之后 下发一次 14号寄存器 0-3位控制通道时码 是否是内部输入 默认 内部
+            dotNetQTDrv.QTWriteRegister(unBoardIndex, DacBaseAddr, 14 * 4, one);
+
+        }
+
+        protected override void ReLoadJson()
+        {
+            lock (_lock)
+            {
+                Logger.Info("更新射频配置成功");
+            }
         }
 
         public override int Initialize(uint uncardIndex)
@@ -61,9 +126,5 @@ namespace TCP.Command.PCIE
             return 0;
         }
 
-        public override void OnOperationCompleted(int channelNo)
-        {
-            throw new NotImplementedException();
-        }
     }
 }

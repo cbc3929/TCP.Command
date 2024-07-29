@@ -4,7 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
+using static TCP.Command.SetStatusCommand;
 
 namespace TCP.Command.PCIE
 {
@@ -14,6 +16,7 @@ namespace TCP.Command.PCIE
         public static List<PcieCard> pcieCards = new List<PcieCard>();
         public static Dictionary<int,PcieCard> CardParam = new Dictionary<int,PcieCard>();
         public static List<string> NewFilePathList = new List<string>();
+        private static FileSystemWatcher _fileWatcher;
         public static PcieCard CreatePcieCard(uint cardIndex, int productNumber)
         {
             switch (productNumber)
@@ -29,11 +32,53 @@ namespace TCP.Command.PCIE
                     throw new ArgumentException("未知的产品编号");
             }
         }
+
+        private static Config LoadConfig(string filePath)
+        {
+            try
+            {
+                string jsonString = File.ReadAllText(filePath);
+                var config = JsonSerializer.Deserialize<Config>(jsonString);
+                return config;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error reading config file: {ex.Message}");
+                return null;
+            }
+        }
+
+        public static int ConfigRFModule(UInt32 CardIndex, UInt32 rf_chan_type, UInt32 rf_chan_num, UInt32 Cmd_type, decimal freq, decimal RF_Atten, decimal IF_Atten, UInt32 RF_onff)
+        {
+            UInt32 ba = 0x800e0000;
+            UInt32[] reg = new UInt32[3];
+            //先写射频频率，衰减，on/off
+            if (Cmd_type == (UInt32)CMD_TYPE.FREQ)
+            {
+                reg[1] = (UInt32)freq;
+
+
+                dotNetQTDrv.QTWriteRegister(CardIndex, ba, 4 * 16, reg[1]);
+
+
+            }
+            else
+            {
+                reg[2] = (UInt32)RF_Atten + ((UInt32)IF_Atten << 6) + ((UInt32)RF_onff << 12);
+                dotNetQTDrv.QTWriteRegister(CardIndex, ba, 4 * 17, reg[2]);
+            }
+            
+            reg[0] = (rf_chan_type & 0x1F) | ((rf_chan_num & 0x1F) << 5) | ((Cmd_type & 0x1F) << 10) | (1 << 16);
+            dotNetQTDrv.QTWriteRegister(CardIndex, ba, 4 * 15, reg[0]);
+            reg[0] = (rf_chan_type & 0x1F) | ((rf_chan_num & 0x1F) << 5) | ((Cmd_type & 0x1F) << 10) | (0 << 16);
+            dotNetQTDrv.QTWriteRegister(CardIndex, ba, 4 * 15, reg[0]);
+            return 0;
+        }
+
         public static List<PcieCard> GetDeviceList()
         {
 
-
-            for (uint i = 1; i < 2; i++)
+            for (uint i = 0; i < 2; i++)
             {
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableReplay, 0);
                 dotNetQTDrv.QTSetRegs_i32(i, Regs.EnableStreaming, 1);
@@ -85,14 +130,33 @@ namespace TCP.Command.PCIE
                     else
                     {
                         pcieCards.Add(card);
-                        if (temp_number == 0x416160B) 
+                        if (temp_number == 0x416160B)
                         {
                             CardParam.Add(2, card);
                             CardParam.Add(3, card);
                             CardParam.Add(4, card);
                             CardParam.Add(5, card);
+                            for (var s = 1; s < 5; s++)
+                            {
+                                ConfigRFModule(card.unBoardIndex, 0, (uint)s, (uint)CMD_TYPE.FREQ, (uint)card.ChannelStates[s - 1].FreqValue / 1000,
+                                    card.ChannelStates[s - 1].RF_Atten, card.ChannelStates[s - 1].IF_Atten, 0);
+                                ConfigRFModule(card.unBoardIndex, 0, (uint)s, (uint)CMD_TYPE.RF_ATT, (uint)card.ChannelStates[s - 1].FreqValue / 1000,
+                                    card.ChannelStates[s - 1].RF_Atten, card.ChannelStates[s - 1].IF_Atten, 0);
+                                ConfigRFModule(card.unBoardIndex, 0, (uint)s, (uint)CMD_TYPE.IF_ATT, (uint)card.ChannelStates[s - 1].FreqValue / 1000,
+                                    card.ChannelStates[s - 1].RF_Atten, card.ChannelStates[s - 1].IF_Atten, 0);
+                            }
+                            Logger.Info("NBCARD RF Has been init");
                         }
-                        else CardParam.Add(1, card);
+                        else {
+                            CardParam.Add(1, card);
+                            ConfigRFModule(card.unBoardIndex, 0, 0, (uint)CMD_TYPE.FREQ, (uint)card.ChannelStates[0].FreqValue / 1000,
+                                    card.ChannelStates[0].RF_Atten, card.ChannelStates[0].IF_Atten, 0);
+                            ConfigRFModule(card.unBoardIndex, 0, 0, (uint)CMD_TYPE.RF_ATT, (uint)card.ChannelStates[0].FreqValue / 1000,
+                                card.ChannelStates[0].RF_Atten, card.ChannelStates[0].IF_Atten, 0);
+                            ConfigRFModule(card.unBoardIndex, 0, 0, (uint)CMD_TYPE.IF_ATT, (uint)card.ChannelStates[0].FreqValue / 1000,
+                                card.ChannelStates[0].RF_Atten, card.ChannelStates[0].IF_Atten, 0);
+                            Logger.Info("WBCARD RF Has been init");
+                        }
                     }
                     #region 有点搓,后面再改吧
 
@@ -141,70 +205,36 @@ namespace TCP.Command.PCIE
         {
             return channelNum == 1 ? 0 : channelNum - 2;
         }
+    }
 
-        public static async Task<string> ReadAndProcessBinFileAsync(string filePath, int proportion, bool insertZero)
-        {
-            // 读取二进制文件
-            byte[] data = await File.ReadAllBytesAsync(filePath);
+    public class Range
+    {
+        public long min { get; set; }
+        public long max { get; set; }
+        public int value { get; set; }
+    }
 
-            // 将二进制数据解析为整数，每个数由两个字节组成
-            int numSamples = data.Length / 2;
-            short[] samples = new short[numSamples];
+    public class Config
+    {
+        public int defaultValue { get; set; }
+        public bool openPrintAbsTimeClock { get; set; }
 
-            Parallel.For(0, numSamples, i =>
-            {
-                samples[i] = BitConverter.ToInt16(data, i * 2);
-            });
+        public int printTic { get; set; }
+        public List<Range> ranges { get; set; }
+    }
 
-            Console.WriteLine($"样本数量：{samples.Length}");
+    public class NBConfig : Config 
+    {
+        public bool isChannelOneIntervalTime { get; set; }
+        public bool isChannelTwoIntervalTime { get; set; }
+        public bool isChannelThreeIntervalTime { get; set; }
+        public bool isChannelFourIntervalTime { get; set; }
 
-            // 计算最大值
-            short maxValue = samples.Max();
-            Console.WriteLine("最大值:", maxValue);
 
-            // 归一化和缩放
-            short[] scaledSamples = new short[numSamples];
+    }
 
-            Parallel.For(0, numSamples, i =>
-            {
-                double normalizedSample = (double)samples[i] / maxValue;
-                scaledSamples[i] = (short)Math.Clamp(normalizedSample * proportion, short.MinValue, short.MaxValue);
-            });
-
-            // 插入0并还原为原来的格式，即2个有符号短整数字节
-            byte[] packedData;
-            if (insertZero)
-            {
-                packedData = new byte[scaledSamples.Length * 4];
-                Parallel.For(0, scaledSamples.Length, i =>
-                {
-                    BitConverter.GetBytes(scaledSamples[i]).CopyTo(packedData, i * 4);
-                    BitConverter.GetBytes((short)0).CopyTo(packedData, i * 4 + 2);
-                });
-            }
-            else
-            {
-                packedData = new byte[scaledSamples.Length * 2];
-                Parallel.For(0, scaledSamples.Length, i =>
-                {
-                    BitConverter.GetBytes(scaledSamples[i]).CopyTo(packedData, i * 2);
-                });
-            }
-
-            // 生成新的文件名并保存在原目录中
-            string directory = Path.GetDirectoryName(filePath);
-            string baseName = Path.GetFileNameWithoutExtension(filePath);
-            string fileExt = Path.GetExtension(filePath);
-            string timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
-            string outputFileName = $"{baseName}_{proportion}_{timestamp}{fileExt}";
-            string outputFilePath = Path.Combine(directory, outputFileName);
-
-            // 保存到新文件
-            await File.WriteAllBytesAsync(outputFilePath, packedData);
-
-            Console.WriteLine($"归一化后的数据已保存到 {outputFilePath}");
-            return outputFilePath;
-        }
-
+    public class WBconfig : Config
+    {
+        public bool isIntervalTime { get; set; }
     }
 }

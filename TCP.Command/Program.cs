@@ -13,7 +13,6 @@ namespace TCP.Command
         static void Main(string[] args)
         {
             ConfigureNLog();
-            var istONG = true;
             var list = PCIeCardFactory.GetDeviceList();
             if (list.Count == 0)
             {
@@ -21,12 +20,11 @@ namespace TCP.Command
                 return;
             }
 
-            TCPServer tCPServer = new TCPServer(9090);
+            TCPServer tCPServer = new TCPServer(32900);
             Logger.Info("Server is Running on port 9090." +
                 "Press Enter to exit.");
             Console.ReadLine();
             tCPServer.Stop();
-            istONG = false;
             //删除所有生成的文件
             if (PCIeCardFactory.NewFilePathList.Count != 0) 
             {

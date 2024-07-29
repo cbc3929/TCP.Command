@@ -1,0 +1,18 @@
+﻿{
+    //默认的功率倍数 最大值30000
+    "defaultValue": 14000,
+    //是否打印外部时统到控制台
+    "openPrintAbsTimeClock": false,
+    //如果打印 打印时间间隔是多少（单位ms 不可超过int32）
+    "printTic": 500,
+    //依次为1 2 3 4通道的时间来源选择，ture 为使用内部时间，false 为外部事件
+    "isChannelOneIntervalTime": true,
+    "isChannelTwoIntervalTime": true,
+    "isChannelThreeIntervalTime": true,
+    "isChannelFourIntervalTime": true,
+    /* 射频功率范围和 功率倍数的关系，注意射频功率落在区间相交的地方或者没有落在任何一个
+    *  区间会使用默认值
+    *
+    */
+    "ranges": []
+    }

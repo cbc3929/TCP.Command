@@ -90,10 +90,14 @@ namespace TCP.Command.Command
                 await ConfigDacWorks(_card.unBoardIndex);
             }
             var filePath = ParseCommandForValue(_commandText);
+            if (filePath == "bad") 
+            {
+                return;
+            }
 
             if (_card.ChannelStates[_channelNum].Srate == 0)
             {
-                _card.ChannelStates[_channelNum].Srate = 256000;
+                _card.ChannelStates[_channelNum].Srate = 100000000;
             }
             _card.FilePath[_channelNum] = filePath;
             Int64 TotalSent = 0;
@@ -104,7 +108,8 @@ namespace TCP.Command.Command
             var prop = await CaculateProportionFromFreqence();
             _channelState.Props = prop;
             Logger.Info("prop is " + prop);
-            var newPath = await ReadAndProcessBinFileAsync(OffLineFile,IsNBcard,prop);
+            var newPath = await ReadAndProcessBinFileAsync(OffLineFile, IsNBcard, prop);
+            //var newPath = OffLineFile;
             PCIeCardFactory.NewFilePathList.Add(newPath);
             _channelState.IsRunning = true;
             //await InitChan();
@@ -323,36 +328,21 @@ namespace TCP.Command.Command
             return TotalMB;
         }
         private async Task<int> CaculateProportionFromFreqence() 
-        {
+        {   //30M-200M 7500 200M-400M 8000 400M-1000M 8200 1000M-1950M buzhun 1950M-2800M 11000 2800M-3400M buzhun
+            //3400M-4200M 11000 4200M- 4585 12000 4585-4630 13000
             var freq = _channelState.FreqValue;
-            int prop = 10000;
-            if (0 < freq && freq <= 1000000000)
-            {
-                prop = 32767;
-            }
-            else if (freq > 1000000000 && freq <= 2000000000) 
-            {
-                prop = 13000;
-            }
-            else if (freq > 2000000000 && freq <= 2700000000)
-            {
-                prop = 14000;
-            }
-            //2900-3300 有个凹陷 4200-4600(28000 14-12) 4700-5100(28000 9.5)
-            else if (freq > 2700000000 && freq <= 3700000000)
-            {
-                prop = 28000;
-            }
-            else if (freq > 3700000000 && freq <= 5000000000)
-            {
-                prop = 29000;
-            }
-            else if (freq > 5000000000 && freq <= 6000000000)
-            {
-                prop = 22000;
-            }
-            return prop;
-
+            //30-400 13000 400-950 14000 950 -1000 17000 1000-1280 14000 1280 -1320 17000 1320-1350 18000 1350-1800 16000
+            //1800-1830 17000 1830-1890 20000 1890-2005 23000  2005-2123 20000  2123-2480 18000 2480-2980 17000 2980-3055 19000
+            //3055-3400 18000 3400-3500 19000 3500-3565 17000 3565- 3615 19000 3615-3750 17000 3750-3805 16000 3805-3834 17000
+            //3834- 3860 buzhun 3860-3880 18000 3880-3940 16000 3940-4000 buzhun 4000-4010 18000 4010-4060 16000 4060- 4145 buzhun
+            //4145-4170 18000 4170-4190 16000 4190-4200 18000 4200-4252 buzhun 4252-4260 20000 4260-4285 18000 4285-4334 16000
+            //4334-4360 18800 4360- 4425 buzhun 4425-4480 18000 4480-4525 20000 4525-4550 23000 4550-4650 18000 4650-4670 20000
+            //4670-4750 18000 4750-4800 23000 4800-4865 20000  4865-4900 23000 4900-4920 25000 4920-4993 23000 4993-5040 buzhun
+            //5040-5095 23000 5095-5100 buzhun 5100-5180 23000 5180-5480 27000 5480-5565 23000 5565-5605 27000 5605-5685 23000
+            //5685-5750 28000 5750-5810 23000 5810-5840 27000 5840-5890 30000  5890-5900 23000 5900-5925 21000 5925-5935 5935-5955 27000
+            //5955 -6000 buzhun
+            //return PCIeCardFactory.GetMappedValue((long)freq);
+            return _card.GetMappedValue((long)freq);
         }
         private async Task StopPlay()
         {
@@ -452,6 +442,7 @@ namespace TCP.Command.Command
             //8号寄存器 循环回放时间间隔
             //宽带以300M为例周期 窄带以150M为周期
             double intervalTimeClockCounts = _channelState.IntervalTimeUs * 300;
+            Logger.Info(intervalTimeClockCounts);
             if (IsNBcard) {
                 intervalTimeClockCounts = _channelState.IntervalTimeUs * 150;
             }
@@ -549,7 +540,8 @@ namespace TCP.Command.Command
             }
             else
             {
-                throw new ArgumentException("Invalid command format.");
+                Logger.Info(command);
+                return "bad";
             }
         }
 

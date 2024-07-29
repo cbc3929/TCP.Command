@@ -92,17 +92,18 @@ namespace TCP.Command.PCIE
             ARBSwitch = false;
             BBSwitch = false;
             RFSwitch = false;
-            FreqValue = 0;
+            FreqValue = 500000000;
             Power = 0;
-            FreqSubUnit = Char.Parse("k");
-            SampSubUnit = Char.Parse("d");
+            FreqSubUnit = Char.Parse("M");
+            SampSubUnit = Char.Parse("M");
             PlaybackMethod = PlaybackMethodType.REP;
             IsLoop = false;
             Magnitude = 500;
             FilePointCount = 0;
             DDS = 0;
+            FreqOrginValue = 100;
             Props = 10000;
-            RF_Atten = 0;
+            RF_Atten = 10;
             IF_Atten = 0;
             IsRunning = false;
             IsFirstRun = true;
@@ -123,7 +124,7 @@ namespace TCP.Command.PCIE
 
                 if (Srate > 10000 && Srate <= 9375000)
                 {
-                    CurrentFIR = 4;
+                    CurrentFIR = 16;
                     var cic = (int)FindNearestPowerOfTwo(_card.FS / Srate);
                     CalculateFarrowValues(_card.FS, Srate, cic);
                     CICNum = cic;
@@ -205,7 +206,7 @@ namespace TCP.Command.PCIE
         public double FindNearestPowerOfTwo(double number)
         {
             // 使用数学方法计算最接近的2的幂
-            int exponent = (int)Math.Round(Math.Log(number, 2));
+            int exponent = (int)Math.Round(Math.Log(number, 2),MidpointRounding.ToNegativeInfinity);
             return Math.Pow(2, exponent);
         }
         /// <summary>

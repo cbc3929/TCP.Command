@@ -41,7 +41,14 @@ namespace TCP.Command
             }
             else if (_commandText.Contains(":BB:ARB:SRATe"))
             {
-                value = state.SrateOrigin.ToString() + state.SampSubUnit + "Hz";
+                if (state.SampSubUnit != 'k' && state.SampSubUnit != 'G' && state.SampSubUnit != 'M')
+                {
+                    value = state.SrateOrigin.ToString() + "sps";
+                }
+                else 
+                {
+                    value = state.SrateOrigin.ToString() + state.SampSubUnit + "sps";
+                }
                 commandType = "SRATE";
             }
             else if (_commandText.Contains(":BB:ARB:SWITCH"))
@@ -61,7 +68,14 @@ namespace TCP.Command
             }
             else if (_commandText.Contains(":FREQuency"))
             {
-                value = state.FreqOrginValue.ToString() + state.FreqSubUnit + "Hz";
+                if (state.FreqSubUnit != 'k' && state.FreqSubUnit != 'M' && state.FreqSubUnit != 'G')
+                {
+                    value = state.FreqOrginValue.ToString()  + "Hz";
+                }
+                else 
+                {
+                    value = state.FreqOrginValue.ToString() + state.FreqSubUnit + "Hz";
+                }
                 commandType = "FREQUENCY";
             }
             else if (_commandText.Contains(":POWer"))
@@ -74,13 +88,13 @@ namespace TCP.Command
                 switch (state.PlaybackMethod) 
                 {
                     case PlaybackMethodType.SIN:
-                        value = "SIN";
+                        value = "SING";
                         break;
                     case PlaybackMethodType.REP:
                         value = "REP";
                         break;
                     case PlaybackMethodType.TIC:
-                        value = "TIC";
+                        value = "TICK";
                         break;
                 } 
                 commandType = "PLAYBACK";

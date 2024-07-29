@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 
@@ -14,7 +15,8 @@ namespace TCP.Command.PCIE
 {
     public abstract class PcieCard
     {
-        private static readonly object _lock = new object();
+        protected Config _config;
+        public static readonly object _lock = new object();
         private UInt32 MARGIN_HIGH_VALUE;
         public UInt32[] AdcUsrReg = new UInt32[32];
         public UInt32[] DacUsrReg = new UInt32[32];
@@ -30,13 +32,14 @@ namespace TCP.Command.PCIE
         public int[] RepKeepRun;
         private int PackLenB = 128 * 1000;
         private int PackNum = 50;
+        public string _configpath;
+        private FileSystemWatcher _fileWatcher;
 
         public bool HasDac { get; set; }
 
         private Mutex mutex_cb;
         public uint SampleRate_WB;
 
-        public int SampleRate_NB { get; private set; }
         public uint FS { get; set; }
         public int NumberOfCards { get; private set; }
         public  UInt32 AdcBaseAddr { get; private set; }
@@ -57,7 +60,6 @@ namespace TCP.Command.PCIE
         /// <summary>
         /// 设备GUID 实际上就是自己设计的
         /// </summary>
-        public Guid Guid { get; set; }
         public int ProductNumber { get; set; }
         public int NOB { get; set; }
         public int DevMaxSampleRate { get; set; }
@@ -71,19 +73,11 @@ namespace TCP.Command.PCIE
         public bool EnALG { get; internal set; }
         public ulong ReqSrate { get; set; }
         public uint ExtTrigSrcPort { get; internal set; }
-        public int NameRule { get; private set; }
-        public int SplitFileSizeMB { get;  set; }
-        public bool EnDUC { get; internal set; }
-        public bool EnSim { get; internal set; }
-        public uint DdcPulseUnit { get; internal set; }
         public uint DacBaseAddr { get; internal set; }
-        public uint DucPulseUnit { get; internal set; }
         public int TrigSrc { get; set; }
         public int Trig_edge { get; set; }
-        public int[] Len { get; private set; }
         public string[] FilePath { get; private set; }
         public uint[] NotifySizeB { get; private set; }
-        public Mutex Muter_cb { get =>mutex_cb;set=>new Mutex(); }
 
         public dotNetQTDrv.DDCCallBackHandle CallBackAppData
         {
@@ -97,34 +91,18 @@ namespace TCP.Command.PCIE
         {
                   get; set;
         }
-        public int EnChCnt { get; internal set; }
-        public int ChEnMask { get; internal set; }
-        public int DaqMode { get; internal set; }
-        public uint Workmode { get; internal set; }
-        public int Trig_cnt { get; internal set; }
-        public bool isFixLength { get; internal set; }
-        public int Timercount { get; internal set; }
-        public int Oset { get; internal set; }
+
 
         public abstract int Initialize(uint unCardIdx);
 
-        public abstract void OnOperationCompleted(int channelNo);
-
-        public abstract void CancelOperations(int channelNo);
-    
-
-
-    
         public PcieCard(uint cardIndex,int channelcount,int numberofcards)
         {
             EnALG = true;
             ReqSrate = 250000;
             SampleRate_WB = 1200000000;
-            SampleRate_NB = 1200000000;
             FS = 0;
-            NameRule = 1;
+            EnALG = true;
             RepKeepRun = new int[ChannelCount];
-            SplitFileSizeMB = 1024;// = 1024;
             MaxNumFiles = 0xffffffff;
             MaxFileSizeMB = 13312 * 1024;
             HasDac = false;
@@ -132,6 +110,8 @@ namespace TCP.Command.PCIE
             ReplayedLenB = 0;
             SampleRate = (uint)ReqSrate;
             EnDACWork = 1;
+            AdcBaseAddr = 0x800F0000;
+            DacBaseAddr = 0x800E0000;
             unBoardIndex = 0;
             MARGIN_HIGH_VALUE = 3550;
             unBoardIndex = cardIndex;
@@ -141,7 +121,6 @@ namespace TCP.Command.PCIE
             Trig_edge = 0;
             mutex_cb = new Mutex();
             ExtTrigSrcPort = 0;
-            LoadConfig();
             InitializeChannelDependentArrays();
             CallBackUserEvent = CallBackFunc_UserEvent_DA;
             CallBackAppData = DataPackProcess;
@@ -159,7 +138,6 @@ namespace TCP.Command.PCIE
                 ChannelStates[i] = new ChannelState(this);
             }
             FilePath = new string[ChannelCount];
-            Len = new int[ChannelCount];
             NotifySizeB = new uint[ChannelCount];
             RepKeepRun = new int[ChannelCount];
         }
@@ -182,6 +160,92 @@ namespace TCP.Command.PCIE
 
             dotNetQTDrv.QTWriteRegister(unBoardIndex, DacBaseAddr, 21 * 4, reg);
         
+        }
+
+
+        protected abstract void ReLoadJson();
+
+        public abstract int GetMappedValue(long inputValue);
+
+        public void PrintTimeClock() 
+        {
+            try
+            {
+                uint baseAddress = DacBaseAddr;
+                uint registerValue30 = 0;
+                uint registerValue31 = 0;
+
+                uint num30 = 30 * 4, num31 = 31 * 4;
+
+                // 读取寄存器30的值
+                dotNetQTDrv.QTReadRegister(unBoardIndex, ref baseAddress, ref num30, ref registerValue30);
+
+                // 读取寄存器31的值
+                dotNetQTDrv.QTReadRegister(unBoardIndex, ref baseAddress, ref num31, ref registerValue31);
+
+                // 从寄存器31的值反解时间
+                uint year = (registerValue30 >> 26) + 2000;
+                uint dayOfYear = (registerValue30 >> 17) & 0x1FF;
+                uint hour = (registerValue30 >> 12) & 0x1F;
+                uint minute = (registerValue30 >> 6) & 0x3F;
+                uint second = registerValue30 & 0x3F;
+
+                // 从寄存器32的值反解子时间
+                uint us = (registerValue31 >> 4) & 0xF;
+                uint ms = registerValue31 & 0xF;
+
+                // 计算出月份和日期
+                uint[] daysInMonth = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+                if ((year % 4 == 0 && year % 100 != 0) || year % 400 == 0)
+                {
+                    daysInMonth[1] = 29; // 闰年2月有29天
+                }
+
+                uint month = 1;
+                uint day = dayOfYear;
+                for (int i = 0; i < daysInMonth.Length; i++)
+                {
+                    if (day <= daysInMonth[i])
+                    {
+                        month = (uint)(i + 1);
+                        break;
+                    }
+                    day -= daysInMonth[i];
+                }
+
+                // 输出反解的时间
+                string dateTimeStr = $"{year}-{month:D2}-{day:D2} {hour:D2}:{minute:D2}:{second:D2}.{ms:D3}{us:D3}";
+                Console.WriteLine(dateTimeStr);
+
+            }
+            catch (Exception e) 
+            {
+                Console.WriteLine("还未读取到时间");
+            }
+            
+        }
+
+        public void SetupFileWatcher(string filePath)
+        {
+            _fileWatcher = new FileSystemWatcher
+            {
+                Path = Path.GetDirectoryName(filePath),
+                
+                Filter = Path.GetFileName(filePath),
+                NotifyFilter = NotifyFilters.LastWrite
+            };
+            Logger.Info(_fileWatcher);
+            _fileWatcher.Changed += OnConfigFileChanged;
+            _fileWatcher.EnableRaisingEvents = true;
+            Logger.Debug("Big Brother Is Watching You!!");
+        }
+
+        private void OnConfigFileChanged(object sender, FileSystemEventArgs e)
+        {
+
+            Logger.Info("配置发生变动。。。更新中");
+            ReLoadJson();
+
         }
 
         //protected void InitializeChannelStates()
@@ -379,35 +443,6 @@ namespace TCP.Command.PCIE
             {
                 Logger.Error(string.Concat("时钟频率错误 ", Convert.ToString(SampleRate), " ", Convert.ToString(OutFreq)), "ERROR");
                 return -1;
-            }
-            return 0;
-        }
-
-        private  int LoadConfig()
-        {
-            try
-            {
-                EnALG = int.Parse(ConfigurationManager.AppSettings["EnALG"]) > 0 ? true : false;
-                EnDUC = int.Parse(ConfigurationManager.AppSettings["EnDUC"]) > 0 ? true : false;
-                EnSim = int.Parse(ConfigurationManager.AppSettings["EnSim"]) > 0 ? true : false;
-                AdcBaseAddr = Convert.ToUInt32(ConfigurationManager.AppSettings["AdcBaseAddr"], 16);
-                DdcPulseUnit = Convert.ToUInt32(ConfigurationManager.AppSettings["DdcPulseUnit"], 16);
-                for (int i = 0; i < 32; i++)
-                {
-                    AdcUsrReg[i] = Convert.ToUInt32(ConfigurationManager.AppSettings[string.Format("AdcUsrReg[{0}]", i)], 16);
-                }
-                DacBaseAddr = Convert.ToUInt32(ConfigurationManager.AppSettings["DacBaseAddr"], 16);
-                DucPulseUnit = Convert.ToUInt32(ConfigurationManager.AppSettings["DucPulseUnit"], 16);
-                for (int i = 0; i < 32; i++)
-                {
-                    DacUsrReg[i] = Convert.ToUInt32(ConfigurationManager.AppSettings[string.Format("DacUsrReg[{0}]", i)], 16);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(string.Format("{0} in LoadConfig()", ex.Message), "ERROR");
-                return -1;
-                //throw;
             }
             return 0;
         }

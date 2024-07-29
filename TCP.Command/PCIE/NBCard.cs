@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace TCP.Command.PCIE
@@ -13,12 +14,41 @@ namespace TCP.Command.PCIE
     {
 
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+        private new NBConfig _config;
+        private bool isPrint;
+        private int _printTicTime;
+        //TODO 一些属性可以直接定义到抽象类里去 后面再说吧
         public NBCard(uint cardIndex,int numberofcards) : base(cardIndex,4, numberofcards)
         {
             FS = 600000000;
             SampleRate = 1200000000;
+            _configpath = "Config/NBconfig.json";
+            _config = LoadConfig(_configpath);
+            SetupFileWatcher(_configpath);
         }
 
+        private async Task StartPrint()
+        {
+            while (isPrint) 
+            {
+                PrintTimeClock();
+                Task.Delay(_printTicTime).Wait();
+            }
+        }
+
+        public override int GetMappedValue(long inputValue)
+        {
+            foreach (var range in _config.ranges)
+            {
+                if (inputValue >= range.min && inputValue <= range.max)
+                {
+                    return range.value;
+                }
+            }
+            // 如果未找到合适的区间，返回默认值
+            Logger.Info("未能匹配到射频功率对应的功率系数，使用默认系数" + _config.defaultValue);
+            return _config.defaultValue;
+        }
         public override int Initialize(uint unCardIdx)
         {
 
@@ -85,17 +115,51 @@ namespace TCP.Command.PCIE
         }
 
 
-        public override void OnOperationCompleted(int channelNo)
+        public void Update_Num14(NBConfig config) 
         {
-            // Place code here to restore hardware state or perform other cleanup operations
-            Logger.Info($"Channel {channelNo} ({DeviceName}): Performing cleanup operations.");
+            uint reg = 0;
+            var one = config.isChannelOneIntervalTime?1u:0u;
+            var two = config.isChannelTwoIntervalTime ? 1u : 0u;
+            var three = config.isChannelThreeIntervalTime ? 1u : 0u;
+            var four = config.isChannelFourIntervalTime ? 1u : 0u;
+            reg = four | three | two | one;
+            //窄带读取 之后 下发一次 14号寄存器 0-3位控制通道时码 是否是内部输入 默认 内部
+            dotNetQTDrv.QTWriteRegister(unBoardIndex, DacBaseAddr, 14 * 4, reg);
+
         }
 
-        public override void CancelOperations(int channelNo)
+        protected  NBConfig LoadConfig(string filePath)
         {
-            ChannelStates[channelNo].singleRunCts?.Cancel();
-            ChannelStates[channelNo].loopRunCts?.Cancel();
-            ChannelStates[channelNo].monitorCts?.Cancel();
+            try
+            {
+                string jsonString = File.ReadAllText(filePath);
+                var config = JsonSerializer.Deserialize<NBConfig>(jsonString);
+                Logger.Info($"读取{DeviceName}配置成功");
+                Update_Num14(config);
+                isPrint = config.openPrintAbsTimeClock;
+                _printTicTime = config.printTic;
+                if (isPrint)
+                {
+                    StartPrint();
+                }
+                return config;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Error reading config file: {ex.Message}");
+                return null;
+            }
+
         }
+
+        protected override void ReLoadJson()
+        {
+            lock (_lock)
+            {
+                _config = LoadConfig(_configpath);
+                Logger.Info("更新射频配置成功");
+            }
+        }
+
     }
 }
